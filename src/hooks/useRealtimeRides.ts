@@ -108,16 +108,32 @@ export const useRealtimeRides = (filters?: {
         setError(null);
       } catch (err) {
         let errorDetail = "Unknown error";
-        if (err instanceof Error) {
+        let isNetworkError = false;
+
+        if (err instanceof TypeError) {
+          // Network errors are TypeErrors
+          if (err.message.includes("Failed to fetch")) {
+            isNetworkError = true;
+            errorDetail = "Network Error - Cannot reach Supabase. Check your internet connection or Supabase project status.";
+          } else {
+            errorDetail = err.message;
+          }
+        } else if (err instanceof Error) {
           errorDetail = err.message;
         } else if (err && typeof err === 'object') {
           errorDetail = (err as any).message || (err as any).error_description || JSON.stringify(err);
         } else {
           errorDetail = String(err);
         }
+
         console.error("useRealtimeRides caught error:", errorDetail);
         console.error("Full error object in catch:", err);
-        setError(new Error(`Failed to fetch rides: ${errorDetail}`));
+
+        if (isNetworkError) {
+          setError(new Error(`${errorDetail}\n\nDebug: Run debugSupabase() in console to check connection.`));
+        } else {
+          setError(new Error(`Failed to fetch rides: ${errorDetail}`));
+        }
       } finally {
         setLoading(false);
       }
@@ -137,15 +153,28 @@ export const useRealtimeRides = (filters?: {
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            // Fetch new ride with host info
+            // Fetch new ride data
             supabase
               .from("rides")
-              .select("*, profiles!rides_host_id_fkey(name, trust_score, department)")
+              .select("id, source, destination, date, time, seats_total, seats_taken, estimated_fare, girls_only, flight_train, host_id, status, created_at")
               .eq("id", payload.new.id)
               .maybeSingle()
-              .then(({ data }) => {
-                if (data) {
-                  setRides((prev) => [data as unknown as RideWithHost, ...prev]);
+              .then(({ data: newRide }) => {
+                if (newRide && newRide.host_id) {
+                  // Fetch host profile
+                  supabase
+                    .from("profiles")
+                    .select("id, name, trust_score, department")
+                    .eq("id", newRide.host_id)
+                    .maybeSingle()
+                    .then(({ data: profile }) => {
+                      if (newRide) {
+                        setRides((prev) => [
+                          { ...newRide, profiles: profile } as RideWithHost,
+                          ...prev,
+                        ]);
+                      }
+                    });
                 }
               });
           } else if (payload.eventType === "UPDATE") {

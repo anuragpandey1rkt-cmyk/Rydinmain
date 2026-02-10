@@ -158,22 +158,34 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             className="bg-red-50 border-2 border-red-300 rounded-lg p-4 text-red-900 text-sm space-y-2"
           >
-            <p className="font-bold text-red-700">⚠️ Database Connection Error</p>
-            <div className="bg-red-100 p-3 rounded font-mono text-xs overflow-auto max-h-24">
+            <p className="font-bold text-red-700">⚠️ Connection Error</p>
+            <div className="bg-red-100 p-3 rounded font-mono text-xs overflow-auto max-h-32 whitespace-pre-wrap break-words">
               {ridesError.message}
             </div>
-            <div className="text-xs space-y-1 bg-red-50 p-2 rounded border border-red-200">
-              <p className="font-semibold text-red-900">Quick Fix:</p>
-              <p>1. Open browser console (F12)</p>
-              <p>2. Type: <code className="bg-red-100 px-1">debugSupabase()</code> and press Enter</p>
-              <p>3. Look for ❌ errors in the output</p>
-              <p>4. Fix the issue indicated by the error</p>
-            </div>
+
+            {ridesError.message.includes("Network Error") ? (
+              <div className="text-xs space-y-1 bg-blue-50 p-2 rounded border border-blue-200">
+                <p className="font-semibold text-blue-900">Network Issue - Check:</p>
+                <p>✓ Your internet connection is working</p>
+                <p>✓ Supabase project is active at: https://supabase.com/dashboard</p>
+                <p>✓ Firewall/VPN not blocking supabase.co</p>
+                <p>✓ Browser DevTools (F12) → Network tab for blocked requests</p>
+                <p className="mt-2">The app will auto-retry in 3 seconds...</p>
+              </div>
+            ) : (
+              <div className="text-xs space-y-1 bg-red-50 p-2 rounded border border-red-200">
+                <p className="font-semibold text-red-900">Quick Fix:</p>
+                <p>1. Open browser console (F12)</p>
+                <p>2. Type: <code className="bg-red-100 px-1">debugSupabase()</code> and press Enter</p>
+                <p>3. Look for ❌ errors in the output</p>
+                <p>4. Fix the issue indicated by the error</p>
+              </div>
+            )}
+
             <div className="text-xs space-y-1">
-              <p>Common issues:</p>
+              <p>Common database issues:</p>
               <p>✓ SQL migrations not run in Supabase</p>
-              <p>✓ Rides table missing or not accessible</p>
-              <p>✓ RLS policies blocking access</p>
+              <p>✓ RLS policies blocking access (403 error)</p>
               <p>✓ Foreign key relationships misconfigured</p>
             </div>
           </motion.div>

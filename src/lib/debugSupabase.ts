@@ -4,8 +4,25 @@ export const debugSupabase = async () => {
   console.log("🔍 Starting Supabase Diagnostic...\n");
 
   try {
+    // 0. Check network connectivity first
+    console.log("0️⃣  Testing network connectivity...");
+    try {
+      const testResponse = await fetch("https://ylyxhdlncslvqdkhzohs.supabase.co/rest/v1/", {
+        method: "HEAD",
+      });
+      console.log("✅ Network reachable");
+      console.log("   Status:", testResponse.status);
+    } catch (networkErr) {
+      console.error("❌ Network unreachable - Cannot connect to Supabase servers");
+      console.error("   This could be:");
+      console.error("   - No internet connection");
+      console.error("   - Firewall blocking supabase.co");
+      console.error("   - VPN/Proxy issues");
+      console.error("   Error:", (networkErr as any).message);
+    }
+
     // 1. Check connection
-    console.log("1️⃣  Testing connection to Supabase...");
+    console.log("\n1️⃣  Testing connection to Supabase...");
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError) {
       console.error("❌ Auth error:", authError.message);
@@ -119,7 +136,37 @@ export const debugSupabase = async () => {
   }
 };
 
+// Export a simple connection test
+export const testSupabaseConnection = async (): Promise<{
+  connected: boolean;
+  message: string;
+  error?: string;
+}> => {
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+      return {
+        connected: false,
+        message: "Supabase Auth Error",
+        error: error.message,
+      };
+    }
+    return {
+      connected: true,
+      message: "Connected to Supabase",
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      message: "Network Error - Cannot reach Supabase",
+      error: (err as any).message,
+    };
+  }
+};
+
 // Run diagnostic on page load (development only)
 if (process.env.NODE_ENV === "development") {
-  console.log("Run 'debugSupabase()' in console to diagnose Supabase connection");
+  console.log("💡 Tips:");
+  console.log("  - Run 'debugSupabase()' to diagnose connection");
+  console.log("  - Run 'testSupabaseConnection()' for quick status check");
 }
