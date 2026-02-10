@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin, Calendar, Clock, Users, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,81 +6,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import EventCard from "@/components/EventCard";
 import EventModal from "@/components/EventModal";
+import { useRealtimeEvents } from "@/hooks/useRealtimeEvents";
 import { useToast } from "@/hooks/use-toast";
 
-interface Event {
-  id: string;
-  name: string;
-  location: string;
-  distance_km?: number;
-  date: string;
-  start_time: string;
-  category: string;
-  interested_count?: number;
-  is_interested?: boolean;
-}
-
 const Events = () => {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [filter, setFilter] = useState<string>("all");
+  const { events, isLoading, error } = useRealtimeEvents(filter);
   const { user } = useAuth();
   const { toast } = useToast();
-
-  useEffect(() => {
-    fetchEvents();
-  }, []);
-
-  const fetchEvents = async () => {
-    try {
-      setIsLoading(true);
-
-      // Fetch events from Supabase
-      const { data: eventsData, error: eventsError } = await supabase
-        .from("events")
-        .select("*")
-        .gte("date", new Date().toISOString().split("T")[0])
-        .order("date", { ascending: true });
-
-      if (eventsError) throw eventsError;
-
-      // Fetch interested users count for each event
-      const eventsWithInterest = await Promise.all(
-        (eventsData || []).map(async (event) => {
-          const { count, error: countError } = await supabase
-            .from("event_interested_users")
-            .select("*", { count: "exact" })
-            .eq("event_id", event.id);
-
-          // Check if current user is interested
-          const { data: userInterest } = await supabase
-            .from("event_interested_users")
-            .select("*")
-            .eq("event_id", event.id)
-            .eq("user_id", user?.id)
-            .maybeSingle();
-
-          return {
-            ...event,
-            interested_count: count || 0,
-            is_interested: !!userInterest,
-          };
-        })
-      );
-
-      setEvents(eventsWithInterest);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load events",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleInterest = async (eventId: string) => {
     if (!user) return;
@@ -104,8 +38,6 @@ const Events = () => {
         });
       }
 
-      // Refresh events
-      await fetchEvents();
       toast({
         title: "Success",
         description: event.is_interested ? "Removed from interested" : "Added to interested",
@@ -136,7 +68,7 @@ const Events = () => {
             <div>
               <h1 className="text-2xl font-bold">Events Nearby</h1>
               <p className="text-sm text-muted-foreground">
-                Find events and ride together
+                Find events and ride together (Real-time)
               </p>
             </div>
             <Button size="icon" className="rounded-lg">
@@ -167,7 +99,11 @@ const Events = () => {
       <div className="max-w-3xl mx-auto px-4 py-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <p className="text-muted-foreground">Loading events...</p>
+            <p className="text-muted-foreground">Loading events in real-time...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12 text-red-600">
+            <p>Error: {error}</p>
           </div>
         ) : filteredEvents.length === 0 ? (
           <div className="text-center py-12">

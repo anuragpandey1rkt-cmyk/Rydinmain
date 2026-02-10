@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin, Clock, Users, ArrowRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,25 +6,12 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import HopperCard from "@/components/HopperCard";
+import { useRealtimeHoppers } from "@/hooks/useRealtimeHoppers";
 import { useToast } from "@/hooks/use-toast";
-
-interface Hopper {
-  id: string;
-  user_id: string;
-  pickup_location: string;
-  drop_location: string;
-  date: string;
-  departure_time: string;
-  status: string;
-  user_name?: string;
-  user_gender?: string;
-  interested_count?: number;
-}
 
 const Hopper = () => {
   const [mode, setMode] = useState<"view" | "create">("view");
-  const [hoppers, setHoppers] = useState<Hopper[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { hoppers, isLoading, error } = useRealtimeHoppers();
   const [fromLocation, setFromLocation] = useState("");
   const [toLocation, setToLocation] = useState("");
   const [departureDate, setDepartureDate] = useState("");
@@ -33,50 +20,6 @@ const Hopper = () => {
   const [isCreating, setIsCreating] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
-
-  useEffect(() => {
-    if (mode === "view") {
-      fetchHoppers();
-    }
-  }, [mode]);
-
-  const fetchHoppers = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from("hoppers")
-        .select("*, profiles (name, gender)")
-        .eq("status", "active")
-        .gte("date", new Date().toISOString().split("T")[0])
-        .order("date", { ascending: true })
-        .order("departure_time", { ascending: true });
-
-      if (error) throw error;
-
-      const mappedHoppers = (data || []).map((hopper: any) => ({
-        id: hopper.id,
-        user_id: hopper.user_id,
-        pickup_location: hopper.pickup_location,
-        drop_location: hopper.drop_location,
-        date: hopper.date,
-        departure_time: hopper.departure_time,
-        status: hopper.status,
-        user_name: hopper.profiles?.name,
-        user_gender: hopper.profiles?.gender,
-      }));
-
-      setHoppers(mappedHoppers);
-    } catch (error) {
-      console.error("Error fetching hoppers:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load hoppers",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleCreateHopper = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +60,6 @@ const Hopper = () => {
       setDepartureTime("");
       setFlexibility(30);
       setMode("view");
-      fetchHoppers();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -153,7 +95,7 @@ const Hopper = () => {
             <div>
               <h1 className="text-2xl font-bold">Hoppers</h1>
               <p className="text-sm text-muted-foreground">
-                Find co-passengers for your trip
+                Find co-passengers for your trip (Real-time)
               </p>
             </div>
             {mode === "view" && (
@@ -199,7 +141,11 @@ const Hopper = () => {
           // View Mode - List Hoppers
           isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <p className="text-muted-foreground">Loading hoppers...</p>
+              <p className="text-muted-foreground">Loading hoppers in real-time...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 text-red-600">
+              <p>Error: {error}</p>
             </div>
           ) : hoppers.length === 0 ? (
             <div className="text-center py-12">
