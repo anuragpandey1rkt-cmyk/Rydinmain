@@ -15,14 +15,14 @@ const queryClient = new QueryClient();
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuth();
   if (!isAuthenticated) return <Navigate to="/auth" replace />;
-  if (user && !user.profileComplete) return <Navigate to="/profile-setup" replace />;
+  if (user && !user.profile_complete) return <Navigate to="/profile-setup" replace />;
   return <>{children}</>;
 }
 
 function AuthRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuth();
-  if (isAuthenticated && user?.profileComplete) return <Navigate to="/" replace />;
-  if (isAuthenticated && !user?.profileComplete) return <Navigate to="/profile-setup" replace />;
+  if (isAuthenticated && user?.profile_complete) return <Navigate to="/" replace />;
+  if (isAuthenticated && !user?.profile_complete) return <Navigate to="/profile-setup" replace />;
   return <>{children}</>;
 }
 
