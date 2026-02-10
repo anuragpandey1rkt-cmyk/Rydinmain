@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Filter, MapPin } from "lucide-react";
+import { Filter, MapPin, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import RideCard from "@/components/RideCard";
@@ -8,6 +8,7 @@ import BottomNav from "@/components/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { joinRideAtomic, isUserInRide, calculateRideSavings } from "@/lib/database";
 
 const filters = ["All", "Airport", "Station", "Girls Only"];
 
@@ -23,6 +24,7 @@ interface RideWithHost {
   girls_only: boolean;
   flight_train: string | null;
   host_id: string;
+  status: string;
   profiles: { name: string; trust_score: number; department: string | null } | null;
 }
 
@@ -30,7 +32,9 @@ const Index = () => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [rides, setRides] = useState<RideWithHost[]>([]);
   const [loading, setLoading] = useState(true);
-  const { session } = useAuth();
+  const [userRides, setUserRides] = useState<Set<string>>(new Set());
+  const [totalSavings, setTotalSavings] = useState(0);
+  const { session, user } = useAuth();
   const { toast } = useToast();
 
   const fetchRides = async () => {
@@ -38,11 +42,29 @@ const Index = () => {
     const { data, error } = await supabase
       .from("rides")
       .select("*, profiles!rides_host_id_fkey(name, trust_score, department)")
-      .eq("status", "active")
+      .in("status", ["open", "full", "locked"])
       .order("created_at", { ascending: false });
 
     if (!error && data) {
       setRides(data as unknown as RideWithHost[]);
+
+      // Fetch user's ride memberships
+      if (session?.user) {
+        const { data: memberships } = await supabase
+          .from("ride_members")
+          .select("ride_id")
+          .eq("user_id", session.user.id);
+
+        if (memberships) {
+          setUserRides(new Set(memberships.map((m) => m.ride_id)));
+        }
+      }
+
+      // Calculate total savings
+      const savings = data.reduce((sum, ride) => {
+        return sum + calculateRideSavings(ride.estimated_fare, ride.seats_total, ride.seats_taken);
+      }, 0);
+      setTotalSavings(savings);
     }
     setLoading(false);
   };
@@ -60,21 +82,37 @@ const Index = () => {
 
   const handleJoin = async (id: string) => {
     if (!session?.user) return;
-    const { error } = await supabase.from("ride_members").insert({
-      ride_id: id,
-      user_id: session.user.id,
-    });
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
+
+    try {
+      const result = await joinRideAtomic(id, session.user.id);
+
+      if (!result.success) {
+        toast({
+          title: "Cannot join",
+          description: result.error || "Unable to join ride",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      toast({
+        title: "Ride joined! 🎉",
+        description: "You've been added to this ride group."
+      });
+
+      // Update local state
+      setUserRides(prev => new Set([...prev, id]));
+
+      // Refetch rides to update seat counts
+      fetchRides();
+    } catch (error: any) {
+      console.error("Join ride error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to join ride",
+        variant: "destructive"
+      });
     }
-    // Increment seats_taken
-    const ride = rides.find((r) => r.id === id);
-    if (ride) {
-      await supabase.from("rides").update({ seats_taken: ride.seats_taken + 1 }).eq("id", id);
-    }
-    toast({ title: "Ride joined! 🎉", description: "You've been added to this ride group." });
-    fetchRides();
   };
 
   return (
@@ -109,6 +147,23 @@ const Index = () => {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-4 space-y-3">
+        {/* Savings Counter Banner */}
+        {totalSavings > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center gap-2"
+          >
+            <TrendingDown className="w-4 h-4 text-primary" />
+            <div>
+              <p className="text-xs font-semibold text-primary">
+                ₹{totalSavings.toLocaleString()} saved collectively
+              </p>
+              <p className="text-xs text-muted-foreground">Across all active rides</p>
+            </div>
+          </motion.div>
+        )}
+
         <div className="flex items-center justify-between mb-1">
           <p className="text-sm text-muted-foreground">
             {loading ? "Loading..." : `${filteredRides.length} ride${filteredRides.length !== 1 ? "s" : ""} available`}
@@ -132,9 +187,13 @@ const Index = () => {
               hostName: ride.profiles?.name || "Unknown",
               hostRating: ride.profiles?.trust_score ?? 4.0,
               hostDepartment: ride.profiles?.department || "",
+              hostId: ride.host_id,
+              status: ride.status,
             }}
             index={i}
             onJoin={handleJoin}
+            isHost={user?.id === ride.host_id}
+            isJoined={userRides.has(ride.id)}
           />
         ))}
 

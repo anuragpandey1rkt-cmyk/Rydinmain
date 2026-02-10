@@ -37,9 +37,11 @@ const CreateRide = () => {
       date,
       time,
       seats_total: parseInt(seatsTotal),
+      seats_taken: 0,
       estimated_fare: parseFloat(estimatedFare),
       girls_only: girlsOnly,
       flight_train: flightTrain || null,
+      status: 'open',
     });
 
     setIsSubmitting(false);
