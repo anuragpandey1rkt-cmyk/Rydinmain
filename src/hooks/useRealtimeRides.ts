@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -28,11 +28,17 @@ export const useRealtimeRides = (filters?: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const channel = useState<RealtimeChannel | null>(null)[0];
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
 
   useEffect(() => {
-    const fetchRides = async () => {
+    const fetchRides = async (retryCount = 0) => {
       try {
         setLoading(true);
+        retryCountRef.current = retryCount;
+
+        // Build query step by step for better error reporting
+        console.log("Starting fetch with filters:", filters);
 
         // Fetch rides first (without joins to avoid relationship cache issues)
         let query = supabase
@@ -55,6 +61,9 @@ export const useRealtimeRides = (filters?: {
 
         const { data: ridesData, error: fetchError } = await query.order("created_at", {
           ascending: false,
+        }).catch(err => {
+          console.error("Query execution failed:", err);
+          throw err;
         });
 
         if (fetchError) {
@@ -114,7 +123,17 @@ export const useRealtimeRides = (filters?: {
           // Network errors are TypeErrors
           if (err.message.includes("Failed to fetch")) {
             isNetworkError = true;
-            errorDetail = "Network Error - Cannot reach Supabase. Check your internet connection or Supabase project status.";
+            errorDetail = "Network Error - Cannot reach Supabase";
+
+            // Retry logic for network errors
+            if (retryCount < maxRetries) {
+              console.warn(`Network error, retrying (${retryCount + 1}/${maxRetries})...`);
+              setLoading(false);
+              setTimeout(() => {
+                fetchRides(retryCount + 1);
+              }, 1000 * (retryCount + 1)); // Exponential backoff: 1s, 2s, 3s
+              return;
+            }
           } else {
             errorDetail = err.message;
           }
@@ -130,7 +149,7 @@ export const useRealtimeRides = (filters?: {
         console.error("Full error object in catch:", err);
 
         if (isNetworkError) {
-          setError(new Error(`${errorDetail}\n\nDebug: Run debugSupabase() in console to check connection.`));
+          setError(new Error(`${errorDetail}\n\nTried ${retryCount} times. Check your internet connection, firewall, or Supabase project status.\n\nRun debugSupabase() in console for more info.`));
         } else {
           setError(new Error(`Failed to fetch rides: ${errorDetail}`));
         }

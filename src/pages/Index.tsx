@@ -22,10 +22,37 @@ const Index = () => {
   const { session, user } = useAuth();
   const { toast } = useToast();
 
-  // Make debug function available in console
+  // Make debug function available in console and run auto-health check
   useEffect(() => {
     (window as any).debugSupabase = debugSupabase;
     console.log("💡 Tip: Run debugSupabase() in the console to diagnose Supabase connection");
+
+    // Auto health check on page load
+    const checkHealth = async () => {
+      try {
+        const response = await fetch("https://ylyxhdlncslvqdkhzohs.supabase.co/rest/v1/health", {
+          method: "GET",
+          headers: {
+            "Accept": "application/json"
+          }
+        }).catch(e => {
+          console.error("❌ Cannot reach Supabase servers:", e.message);
+          console.log("   Possible causes:");
+          console.log("   - Network/Firewall blocking supabase.co");
+          console.log("   - Supabase project is down");
+          console.log("   - DNS resolution issues");
+          return null;
+        });
+
+        if (response) {
+          console.log("✅ Supabase servers reachable");
+        }
+      } catch (e) {
+        console.error("Health check failed:", e);
+      }
+    };
+
+    checkHealth();
   }, []);
 
   // Use real-time rides hook
@@ -164,21 +191,31 @@ const Index = () => {
             </div>
 
             {ridesError.message.includes("Network Error") ? (
-              <div className="text-xs space-y-1 bg-blue-50 p-2 rounded border border-blue-200">
-                <p className="font-semibold text-blue-900">Network Issue - Check:</p>
-                <p>✓ Your internet connection is working</p>
-                <p>✓ Supabase project is active at: https://supabase.com/dashboard</p>
-                <p>✓ Firewall/VPN not blocking supabase.co</p>
-                <p>✓ Browser DevTools (F12) → Network tab for blocked requests</p>
-                <p className="mt-2">The app will auto-retry in 3 seconds...</p>
+              <div className="text-xs space-y-2 bg-blue-50 p-3 rounded border border-blue-200">
+                <p className="font-semibold text-blue-900">🌐 Network Connectivity Issue</p>
+                <div className="space-y-1">
+                  <p><strong>Step 1:</strong> Check your internet connection</p>
+                  <p className="text-blue-800">- Open a new tab and go to google.com</p>
+                  <p className="text-blue-800">- If it loads, your internet works</p>
+                </div>
+                <div className="space-y-1">
+                  <p><strong>Step 2:</strong> Check if Supabase is up</p>
+                  <p className="text-blue-800">- Visit: https://status.supabase.com/</p>
+                  <p className="text-blue-800">- Check for any incidents</p>
+                </div>
+                <div className="space-y-1">
+                  <p><strong>Step 3:</strong> Check firewall/VPN</p>
+                  <p className="text-blue-800">- Temporarily disable VPN if using one</p>
+                  <p className="text-blue-800">- Whitelist: ylyxhdlncslvqdkhzohs.supabase.co</p>
+                </div>
+                <p className="text-blue-800 mt-2">⏳ App will auto-retry every few seconds...</p>
               </div>
             ) : (
               <div className="text-xs space-y-1 bg-red-50 p-2 rounded border border-red-200">
-                <p className="font-semibold text-red-900">Quick Fix:</p>
+                <p className="font-semibold text-red-900">Database Issue:</p>
                 <p>1. Open browser console (F12)</p>
-                <p>2. Type: <code className="bg-red-100 px-1">debugSupabase()</code> and press Enter</p>
-                <p>3. Look for ❌ errors in the output</p>
-                <p>4. Fix the issue indicated by the error</p>
+                <p>2. Type: <code className="bg-red-100 px-1">debugSupabase()</code></p>
+                <p>3. Look for ❌ errors and fix them</p>
               </div>
             )}
 
