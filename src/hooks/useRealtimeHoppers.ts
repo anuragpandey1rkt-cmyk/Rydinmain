@@ -7,12 +7,12 @@ export interface Hopper {
   user_id: string;
   pickup_location: string;
   drop_location: string;
-  date: string;
+  departure_date: string;
   departure_time: string;
-  flexibility_minutes: number;
+  seats_total: number;
+  seats_taken: number;
   status: string;
   created_at: string;
-  updated_at: string;
   user_name?: string;
   user_gender?: string;
 }
@@ -35,8 +35,8 @@ export const useRealtimeHoppers = () => {
           .from("hoppers")
           .select("*, profiles (name, gender)")
           .eq("status", "active")
-          .gte("date", new Date().toISOString().split("T")[0])
-          .order("date", { ascending: true })
+          .gte("departure_date", new Date().toISOString().split("T")[0])
+          .order("departure_date", { ascending: true })
           .order("departure_time", { ascending: true });
 
         if (fetchError) throw fetchError;
@@ -82,7 +82,7 @@ export const useRealtimeHoppers = () => {
                   });
               } else if (payload.eventType === "UPDATE") {
                 setHoppers((prev) =>
-                  prev.map((h) => (h.id === payload.new.id ? payload.new : h))
+                  prev.map((h) => (h.id === payload.new.id ? { ...h, ...payload.new } as Hopper : h))
                 );
               } else if (payload.eventType === "DELETE") {
                 setHoppers((prev) => prev.filter((h) => h.id !== payload.old.id));

@@ -59,16 +59,31 @@ export const useRealtimeRides = (filters?: {
           query = query.ilike("source", `%${filters.source}%`);
         }
 
-        const { data: ridesData, error: fetchError } = await query.order("created_at", {
-          ascending: false,
-        });
+        // Wrap query execution in a timeout to prevent hanging requests
+        // query = query.order("created_at", { ascending: false }); // SAFEGUARD: created_at might be missing
+        query = query.order("date", { ascending: true }); // Sort by departure date instead
+
+        // Execute query WITHOUT custom timeout to see real error
+        const { data: ridesData, error: fetchError } = await query;
+
+        // Timeout wrapper removed for debugging
+        /*
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Supabase request timed out")), 5000)
+        );
+        const result: any = await Promise.race([queryPromise, timeoutPromise]);
+        const { data: ridesData, error: fetchError } = result;
+        */
 
         if (fetchError) {
-          const errorMsg = fetchError?.message || fetchError?.error_description || String(fetchError);
+          const errorMsg = fetchError.message || (fetchError as any).error_description || String(fetchError);
           const errorCode = (fetchError as any)?.code;
           const errorStatus = (fetchError as any)?.status;
 
-          console.error("Supabase fetch error - message:", errorMsg);
+          // Only log critical errors, ignore expected timeouts during nav
+          if (!errorMsg.includes("timed out") && !errorMsg.includes("network")) {
+            console.error("❌ Error fetching rides:", errorMsg);
+          }
           console.error("Supabase fetch error - code:", errorCode);
           console.error("Supabase fetch error - status:", errorStatus);
           console.error("Full error object:", fetchError);
