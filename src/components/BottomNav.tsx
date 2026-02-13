@@ -4,10 +4,10 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
+  { icon: PlusCircle, label: "Hopper", path: "/hopper" },
   { icon: MapPin, label: "Events", path: "/events" },
   { icon: Train, label: "Travel", path: "/travel" },
   { icon: Bot, label: "AI", path: "/ai" },
-  { icon: MessageCircle, label: "Chat", path: "/chat" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
 

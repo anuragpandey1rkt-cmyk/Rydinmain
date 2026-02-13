@@ -2,8 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
+import { debugSupabase } from "@/lib/debugSupabase";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ProfileSetup from "./pages/ProfileSetup";
@@ -21,6 +23,14 @@ const queryClient = new QueryClient();
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, user, isLoading } = useAuth();
+  const location = useLocation();
+
+  console.log("🔐 ProtectedRoute check:", {
+    path: location.pathname,
+    isLoading,
+    isAuthenticated,
+    profileComplete: user?.profile_complete
+  });
 
   if (isLoading) {
     return (
@@ -31,20 +41,30 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!isAuthenticated) {
+    console.log("🚫 Not authenticated, redirecting to /auth");
     return <Navigate to="/auth" replace />;
   }
 
-  if (user && !user.profile_complete) {
+  // CRITICAL FIX: Don't redirect if we are ALREADY on the profile setup page
+  if (user && !user.profile_complete && location.pathname !== "/profile-setup") {
+    console.log("📝 Profile incomplete, redirecting to /profile-setup");
     return <Navigate to="/profile-setup" replace />;
   }
 
+  // If profile IS complete but user tries to go to setup, optional: redirect to home?
+  // For now, removing this restriction or just letting them access it to edit is safer.
+
+  console.log("✅ Access granted to:", location.pathname);
   return <>{children}</>;
 };
 
 const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, user, isLoading } = useAuth();
 
+  console.log("🔓 AuthRoute check:", { isLoading, isAuthenticated, user: user?.email, profileComplete: user?.profile_complete });
+
   if (isLoading) {
+    console.log("⏳ AuthRoute: Still loading...");
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <p className="text-muted-foreground">Loading...</p>
@@ -53,10 +73,17 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   // If user is fully authenticated with profile complete, redirect to home
-  if (isAuthenticated && user?.profile_complete) {
-    return <Navigate to="/" replace />;
+  if (isAuthenticated) {
+    if (user?.profile_complete) {
+      console.log("✅ AuthRoute: Already authenticated, redirecting to /");
+      return <Navigate to="/" replace />;
+    } else {
+      console.log("⚠️ AuthRoute: Authenticated but profile incomplete, redirecting to /profile-setup");
+      return <Navigate to="/profile-setup" replace />;
+    }
   }
 
+  console.log("🔓 AuthRoute: Showing auth page");
   return <>{children}</>;
 };
 
@@ -77,18 +104,26 @@ const AppRoutes = () => (
   </Routes>
 );
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  useEffect(() => {
+    // Run diagnostics once on mount to help user
+    console.log("🚀 Auto-running Supabase diagnostics...");
+    debugSupabase();
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

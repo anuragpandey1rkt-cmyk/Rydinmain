@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Filter, MapPin, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,43 +22,18 @@ const Index = () => {
   const { session, user } = useAuth();
   const { toast } = useToast();
 
-  // Make debug function available in console and run auto-health check
+  // Make debug function available in console
   useEffect(() => {
     (window as any).debugSupabase = debugSupabase;
     console.log("💡 Tip: Run debugSupabase() in the console to diagnose Supabase connection");
-
-    // Auto health check on page load
-    const checkHealth = async () => {
-      try {
-        const response = await fetch("https://ylyxhdlncslvqdkhzohs.supabase.co/rest/v1/health", {
-          method: "GET",
-          headers: {
-            "Accept": "application/json"
-          }
-        }).catch(e => {
-          console.error("❌ Cannot reach Supabase servers:", e.message);
-          console.log("   Possible causes:");
-          console.log("   - Network/Firewall blocking supabase.co");
-          console.log("   - Supabase project is down");
-          console.log("   - DNS resolution issues");
-          return null;
-        });
-
-        if (response) {
-          console.log("✅ Supabase servers reachable");
-        }
-      } catch (e) {
-        console.error("Health check failed:", e);
-      }
-    };
-
-    checkHealth();
   }, []);
 
   // Use real-time rides hook
-  const { rides, loading, error: ridesError } = useRealtimeRides({
-    status: ["open", "full", "locked"],
-  });
+  const { rides, loading, error: ridesError } = useRealtimeRides(
+    useMemo(() => ({
+      status: ["open", "full", "locked"],
+    }), [])
+  );
 
   // Fetch user's ride memberships
   useEffect(() => {
@@ -218,6 +193,25 @@ const Index = () => {
                 <p>3. Look for ❌ errors and fix them</p>
               </div>
             )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => (window as any).debugSupabase && (window as any).debugSupabase()}
+                className="flex-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold py-2 rounded mt-2 border border-red-300 transition-colors"
+              >
+                👉 DIAGNOSE
+              </button>
+              <button
+                onClick={async () => {
+                  localStorage.clear();
+                  await supabase.auth.signOut();
+                  window.location.reload();
+                }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold py-2 rounded mt-2 border border-gray-300 transition-colors"
+              >
+                🔁 RESET APP
+              </button>
+            </div>
 
             <div className="text-xs space-y-1">
               <p>Common database issues:</p>

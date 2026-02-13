@@ -9,7 +9,7 @@ interface HopperCardProps {
     user_id: string;
     pickup_location: string;
     drop_location: string;
-    date: string;
+    departure_date: string;
     departure_time: string;
     user_name?: string;
     user_gender?: string;
@@ -93,7 +93,7 @@ const HopperCard = ({ hopper, onJoin }: HopperCardProps) => {
           </div>
           <div className="flex items-center gap-1 text-muted-foreground">
             <span className="text-xs bg-muted px-2 py-1 rounded">
-              {formatDate(hopper.date)}
+              {formatDate(hopper.departure_date)}
             </span>
           </div>
         </div>

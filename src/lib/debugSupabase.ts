@@ -22,17 +22,40 @@ export const debugSupabase = async () => {
     }
 
     // 1. Check connection
-    console.log("\n1️⃣  Testing connection to Supabase...");
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      console.error("❌ Auth error:", authError.message);
+    console.log("\n1️⃣  Testing connection to Supabase... (Skipping getUser to avoid hang)");
+    // const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // if (authError) {
+    //   console.error("❌ Auth error:", authError.message);
+    // } else {
+    //   console.log("✅ Connected to Supabase");
+    //   console.log("   User:", user?.email || "Not authenticated");
+    // }
+
+    // 2. Check rides table exists (Using DIRECT FETCH to bypass client)
+    console.log("\n2️⃣  Checking rides table (Direct REST)...");
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const projectUrl = import.meta.env.VITE_SUPABASE_URL;
+
+    if (!anonKey || !projectUrl) {
+      console.error("❌ Missing env vars");
     } else {
-      console.log("✅ Connected to Supabase");
-      console.log("   User:", user?.email || "Not authenticated");
+      try {
+        const resp = await fetch(`${projectUrl}/rest/v1/rides?select=count`, {
+          method: 'HEAD',
+          headers: {
+            'apikey': anonKey,
+            'Authorization': `Bearer ${anonKey}`
+          }
+        });
+        console.log("   Direct Fetch Status:", resp.status);
+        console.log("   Direct Fetch Headers:", Object.fromEntries(resp.headers.entries()));
+      } catch (e) {
+        console.error("❌ Direct fetch failed:", e);
+      }
     }
 
-    // 2. Check rides table exists
-    console.log("\n2️⃣  Checking rides table...");
+    // Resume standard client check
     const ridesQuery = supabase
       .from("rides")
       .select("*", { count: "exact", head: true });
@@ -55,7 +78,7 @@ export const debugSupabase = async () => {
     const { data: profilesData, error: profilesError, count: profilesCount } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true });
-    
+
     if (profilesError) {
       console.error("❌ Profiles table error:", profilesError.message);
     } else {
@@ -68,7 +91,7 @@ export const debugSupabase = async () => {
     const { data: membersData, error: membersError, count: membersCount } = await supabase
       .from("ride_members")
       .select("*", { count: "exact", head: true });
-    
+
     if (membersError) {
       console.error("❌ Ride members table error:", membersError.message);
     } else {
@@ -81,7 +104,7 @@ export const debugSupabase = async () => {
     const { data: messagesData, error: messagesError, count: messagesCount } = await supabase
       .from("messages")
       .select("*", { count: "exact", head: true });
-    
+
     if (messagesError) {
       console.error("❌ Messages table error:", messagesError.message);
     } else {
