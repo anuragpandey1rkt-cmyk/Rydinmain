@@ -6,9 +6,15 @@ export const debugSupabase = async () => {
   try {
     // 0. Check network connectivity first
     console.log("0️⃣  Testing network connectivity...");
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
     try {
       const testResponse = await fetch("https://ylyxhdlncslvqdkhzohs.supabase.co/rest/v1/", {
         method: "HEAD",
+        headers: {
+          'apikey': anonKey || "",
+          'Authorization': `Bearer ${anonKey || ""}`
+        }
       });
       console.log("✅ Network reachable");
       console.log("   Status:", testResponse.status);
@@ -34,7 +40,6 @@ export const debugSupabase = async () => {
     // 2. Check rides table exists (Using DIRECT FETCH to bypass client)
     console.log("\n2️⃣  Checking rides table (Direct REST)...");
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
     const projectUrl = import.meta.env.VITE_SUPABASE_URL;
 
     if (!anonKey || !projectUrl) {

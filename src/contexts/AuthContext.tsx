@@ -284,15 +284,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { error } = await Promise.race([updatePromise, timeoutPromise]) as any;
 
-        if (error) {
-          console.error("❌ Database update failed:", error);
-          // If we have a specific RLS error, we might want to alert the user/dev
-          if (error.code === '42501') console.error("🛑 RLS Policy Violation - Check Table Permissions");
-        } else {
-          console.log("✅ Database update successful");
-        }
+        if (error) throw error; // Throw to trigger fallback in catch block
+
+        console.log("✅ Database update successful");
       } catch (err) {
-        console.warn("⚠️ Update timed out or failed, proceeding anyway:", err);
+        console.warn("⚠️ Standard update timed out or failed:", err);
+        console.log("🔄 Attempting RPC fallback...");
+
+        // RPC Fallback Attempt
+        try {
+          const { error: rpcError } = await supabase.rpc('update_profile_safe', {
+            p_name: data.name || "",
+            p_department: data.department || "",
+            p_year: data.year || "",
+            p_phone: data.phone || "",
+            p_gender: (data.gender || "") as string,
+            p_emergency_contact_name: data.emergency_contact_name || "",
+            p_emergency_contact_phone: data.emergency_contact_phone || ""
+          });
+
+          if (rpcError) {
+            console.error("❌ RPC fallback also failed:", rpcError);
+            if (rpcError.code === '42501') {
+              console.error("🛑 RLS Policy Violation - Check Table Permissions");
+            }
+          } else {
+            console.log("✅ RPC fallback update successful");
+          }
+        } catch (rpcEx) {
+          console.error("❌ RPC execution error:", rpcEx);
+        }
       }
 
       // Always update local state
