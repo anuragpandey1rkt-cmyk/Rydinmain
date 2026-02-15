@@ -70,6 +70,25 @@ export const BADGES: Badge[] = [
  */
 export const getUserBadges = async (userId: string): Promise<Badge[]> => {
   try {
+    const { data: earnedBadges, error } = await supabase
+      .from('user_badges')
+      .select('*, badges(*)')
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    if (earnedBadges && earnedBadges.length > 0) {
+      return earnedBadges.map((eb: any) => ({
+        id: eb.badges.id,
+        name: eb.badges.name,
+        description: eb.badges.description,
+        icon: eb.badges.icon_emoji || '🏅',
+        requirement: 0, // Requirement reached if earned
+        category: 'rides', // Fallback
+      }));
+    }
+
+    // Fallback to calculation if no data in table yet
     const { data: rideCount } = await supabase
       .from('split_members')
       .select('*')
@@ -82,8 +101,6 @@ export const getUserBadges = async (userId: string): Promise<Badge[]> => {
       .maybeSingle();
 
     const userBadges: Badge[] = [];
-
-    // Check which badges user qualifies for
     BADGES.forEach((badge) => {
       if (badge.category === 'rides' && (rideCount?.length || 0) >= badge.requirement) {
         userBadges.push(badge);
@@ -132,16 +149,27 @@ export const getReliabilityLeaderboard = async (limit: number = 10) => {
 export const getTopSplittersLeaderboard = async (limit: number = 10) => {
   try {
     // Get users with most splits
+    // To fix lint: Supabase doesn't support groupBy directly in JS client
+    // In production, use a RPC function like 'get_top_splitters'
     const { data, error } = await supabase
       .from('split_members')
-      .select('user_id, count(*) as ride_count')
-      .groupBy('user_id')
-      .order('ride_count', { ascending: false })
-      .limit(limit);
+      .select('user_id')
+      .limit(limit * 10);
 
     if (error) throw error;
 
-    const userIds = (data || []).map((d: any) => d.user_id);
+    // Manual grouping
+    const counts: Record<string, number> = {};
+    data?.forEach(d => {
+      counts[d.user_id] = (counts[d.user_id] || 0) + 1;
+    });
+
+    const groupedData = Object.entries(counts)
+      .map(([user_id, count]) => ({ user_id, ride_count: count }))
+      .sort((a, b) => b.ride_count - a.ride_count)
+      .slice(0, limit);
+
+    const userIds = groupedData.map((d: any) => d.user_id);
 
     // Get user profiles
     const { data: profiles } = await supabase
@@ -170,24 +198,35 @@ export const getTopSplittersLeaderboard = async (limit: number = 10) => {
  */
 export const getTopReferrersLeaderboard = async (limit: number = 10) => {
   try {
-    const { data, error } = await supabase
+    // In production, use a RPC function like 'get_top_referrers_leaderboard'
+    // To fix lint: Supabase doesn't support groupBy directly in JS client
+    const { data: referrals, error } = await supabase
       .from('referrals')
-      .select('referrer_id, count(*) as referral_count')
+      .select('referrer_id')
       .eq('status', 'completed')
-      .groupBy('referrer_id')
-      .order('referral_count', { ascending: false })
-      .limit(limit);
+      .limit(limit * 10);
 
     if (error) throw error;
 
-    const userIds = (data || []).map((d: any) => d.referrer_id);
+    // Manual grouping
+    const counts: Record<string, number> = {};
+    referrals?.forEach(r => {
+      counts[r.referrer_id] = (counts[r.referrer_id] || 0) + 1;
+    });
+
+    const groupedData = Object.entries(counts)
+      .map(([referrer_id, count]) => ({ referrer_id, referral_count: count }))
+      .sort((a, b) => b.referral_count - a.referral_count)
+      .slice(0, limit);
+
+    const userIds = groupedData.map((d: any) => d.referrer_id);
 
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, name')
       .in('id', userIds);
 
-    return (data || []).map((stat: any, index) => {
+    return (groupedData || []).map((stat: any, index) => {
       const profile = profiles?.find((p) => p.id === stat.referrer_id);
       return {
         rank: index + 1,

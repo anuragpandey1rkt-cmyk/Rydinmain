@@ -1,19 +1,63 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { ArrowLeft, Heart, MapPin, Phone, Building, GraduationCap, Shield, LogOut, Edit2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ArrowLeft,
+  Heart,
+  MapPin,
+  Phone,
+  Building,
+  GraduationCap,
+  Shield,
+  LogOut,
+  Edit2,
+  CheckCircle,
+  Award,
+  Users,
+  Wallet
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge as UIWebBadge } from "@/components/ui/badge";
 import BottomNav from "@/components/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { getReliabilityBadgeConfig } from "@/lib/noShowHandling";
+import { IDScanner } from "@/components/IDScanner";
+import { getUserBadges, Badge as GameBadge } from "@/lib/leaderboards";
+import { getUserReferralStats } from "@/lib/referrals";
 
 const Profile = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { toast } = useToast();
+
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [badges, setBadges] = useState<GameBadge[]>([]);
+  const [referralStats, setReferralStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchUserStats();
+    }
+  }, [user?.id]);
+
+  const fetchUserStats = async () => {
+    try {
+      setLoadingStats(true);
+      const [earnedBadges, stats] = await Promise.all([
+        getUserBadges(user!.id),
+        getUserReferralStats(user!.id)
+      ]);
+      setBadges(earnedBadges);
+      setReferralStats(stats);
+    } catch (error) {
+      console.error("Error fetching profile stats:", error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -25,6 +69,16 @@ const Profile = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
     setIsLoggingOut(false);
+  };
+
+  const handleScanSuccess = () => {
+    setShowScanner(false);
+    toast({
+      title: "Success",
+      description: "Identity verified successfully!",
+    });
+    // Refresh user data or reload page
+    window.location.reload();
   };
 
   if (!user) {
@@ -68,7 +122,12 @@ const Profile = () => {
           <div className="space-y-4">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-2xl sm:text-3xl font-bold font-display">{user.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl sm:text-3xl font-bold font-display">{user.name}</h2>
+                  {user.phone_verified && (
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">{user.email}</p>
               </div>
               <div className="text-right">
@@ -82,6 +141,62 @@ const Profile = () => {
               <p className="text-xs font-semibold">{badgeConfig.icon} {badgeConfig.label}</p>
               <p className="text-xs">{badgeConfig.description}</p>
             </div>
+          </div>
+        </div>
+
+        {/* Verification Section */}
+        {!user.phone_verified && (
+          <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 rounded-xl p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">Verify Your Identity</p>
+              <p className="text-xs text-orange-800 dark:text-orange-200">Scan student ID to get "Verified" badge</p>
+            </div>
+            <Button size="sm" onClick={() => setShowScanner(true)}>Verify Now</Button>
+          </div>
+        )}
+
+        {/* Real-time Stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-card rounded-lg p-4 border border-border flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-full text-primary">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Credits</p>
+              <p className="text-xl font-bold font-display">₹{referralStats?.total_earned || 0}</p>
+            </div>
+          </div>
+          <div className="bg-card rounded-lg p-4 border border-border flex items-center gap-3">
+            <div className="p-2 bg-green-100 rounded-full text-green-600">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Referrals</p>
+              <p className="text-xl font-bold font-display">{referralStats?.total_referrals || 0}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Badges Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-muted-foreground">Earned Badges</h3>
+            <span className="text-xs text-primary font-medium">{badges.length} Unlocked</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {badges.length > 0 ? (
+              badges.map((badge) => (
+                <UIWebBadge key={badge.id} variant="secondary" className="px-3 py-1 flex items-center gap-1.5">
+                  <span>{badge.icon}</span>
+                  <span>{badge.name}</span>
+                </UIWebBadge>
+              ))
+            ) : (
+              <div className="w-full py-8 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center text-center space-y-2">
+                <Award className="w-8 h-8 text-muted-foreground/30" />
+                <p className="text-xs text-muted-foreground">Complete rides and splits to earn badges!</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -131,22 +246,6 @@ const Profile = () => {
           )}
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-card rounded-lg p-4 text-center border border-border">
-            <div className="text-2xl font-bold text-primary mb-1">0</div>
-            <p className="text-xs text-muted-foreground">Rides Completed</p>
-          </div>
-          <div className="bg-card rounded-lg p-4 text-center border border-border">
-            <div className="text-2xl font-bold text-primary mb-1">₹0</div>
-            <p className="text-xs text-muted-foreground">Total Saved</p>
-          </div>
-          <div className="bg-card rounded-lg p-4 text-center border border-border">
-            <div className="text-2xl font-bold text-primary mb-1">0</div>
-            <p className="text-xs text-muted-foreground">No-shows</p>
-          </div>
-        </div>
-
         {/* Actions */}
         <div className="space-y-2 pt-4">
           <Button
@@ -168,6 +267,16 @@ const Profile = () => {
           </Button>
         </div>
       </motion.main>
+
+      <AnimatePresence>
+        {showScanner && (
+          <IDScanner
+            userId={user.id}
+            onSuccess={handleScanSuccess}
+            onCancel={() => setShowScanner(false)}
+          />
+        )}
+      </AnimatePresence>
 
       <BottomNav />
     </div>

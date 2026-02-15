@@ -67,9 +67,27 @@ export const scheduleRideReminder = async (
 /**
  * Schedule generic notification
  */
-const scheduleNotification = (notification: Partial<Notification>) => {
-  console.log('📬 Scheduled notification:', notification);
-  // In production: Save to notifications table in Supabase
+const scheduleNotification = async (notification: Partial<Notification>) => {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: notification.user_id,
+        type: notification.type === 'reminder' ? 'ride_reminder' :
+          notification.type === 'payment' ? 'payment_reminder' :
+            notification.type === 'split' ? 'split_invitation' :
+              notification.type === 'badge' ? 'badge_earned' : notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: { action_url: notification.action_url, scheduled_for: notification.scheduled_for }
+      });
+
+    if (error) throw error;
+    console.log('📬 Notification saved:', notification);
+  } catch (error) {
+    console.error('Failed to save notification:', error);
+  }
 };
 
 /**
@@ -152,9 +170,16 @@ export const sendReferralNotification = (userId: string, amount: number): boolea
  */
 export const getUserNotifications = async (userId: string, limit: number = 20) => {
   try {
-    console.log(`📬 Getting notifications for user ${userId}`);
-    // In production: Fetch from notifications table
-    return [];
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return data || [];
   } catch (error) {
     console.error('Failed to get notifications:', error);
     return [];
@@ -166,8 +191,14 @@ export const getUserNotifications = async (userId: string, limit: number = 20) =
  */
 export const markNotificationAsRead = async (notificationId: string): Promise<boolean> => {
   try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true, read_at: new Date().toISOString() })
+      .eq('id', notificationId);
+
+    if (error) throw error;
     console.log(`✅ Marked notification ${notificationId} as read`);
-    // In production: Update in database
     return true;
   } catch (error) {
     console.error('Failed to mark notification as read:', error);

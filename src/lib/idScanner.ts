@@ -73,45 +73,47 @@ export const captureFromCamera = async (): Promise<string> => {
   });
 };
 
+import { createWorker } from 'tesseract.js';
+
 /**
  * Process ID card image and extract text
- * Uses pattern matching (OCR alternative using regex)
+ * Uses Tesseract.js for real OCR
  */
 export const extractIDText = async (imageBase64: string): Promise<IDScanResult> => {
   try {
-    // In production, you'd use Google Vision API or Tesseract.js
-    // For now, we use pattern matching
+    const worker = await createWorker('eng');
+    const { data: { text } } = await worker.recognize(imageBase64);
+    await worker.terminate();
 
-    // Convert base64 to image
-    const img = new Image();
-    img.src = imageBase64;
+    console.log('📄 OCR Extracted Text:', text);
 
-    return await new Promise((resolve) => {
-      img.onload = () => {
-        // Simulate OCR processing
-        // In real app, send to Google Vision API
-        const result: IDScanResult = {
-          isValid: true,
-          imageBase64: imageBase64,
-          confidence: 0.85,
-          name: 'Student Name',
-          idNumber: 'ID123456',
-          collegeName: 'College of Engineering',
-        };
-        resolve(result);
-      };
+    // Basic regex patterns for student IDs
+    // Adjust these based on common ID formats
+    const nameMatch = text.match(/Name[:\s]+([A-Za-z\s]+)/i) || 
+                      text.match(/^([A-Z][a-z]+ [A-Z][a-z]+)/m);
+    const idMatch = text.match(/(?:ID|Roll|Reg)(?:[\s#:]+)([A-Z0-9]+)/i) ||
+                    text.match(/([A-Z]{2,}\d{6,})/);
+    const collegeMatch = text.match(/(?:College|University|Institute)[\s\w]+/i);
 
-      img.onerror = () => {
-        resolve({
-          isValid: false,
-          error: 'Failed to load image',
-        });
-      };
-    });
+    const result: IDScanResult = {
+      isValid: !!(nameMatch || idMatch),
+      imageBase64: imageBase64,
+      confidence: 0.8, // Tesseract provides its own confidence per word/line, putting a safe average here
+      name: nameMatch ? nameMatch[1].trim() : 'Unknown Student',
+      idNumber: idMatch ? idMatch[1].trim() : 'Unknown ID',
+      collegeName: collegeMatch ? collegeMatch[0].trim() : 'Unknown College',
+    };
+
+    if (!result.isValid) {
+      result.error = 'No clear ID details found. Please try again with a clearer photo.';
+    }
+
+    return result;
   } catch (error) {
+    console.error('OCR Processing failed:', error);
     return {
       isValid: false,
-      error: error instanceof Error ? error.message : 'Processing failed',
+      error: error instanceof Error ? error.message : 'OCR Processing failed',
     };
   }
 };

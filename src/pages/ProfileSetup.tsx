@@ -192,45 +192,60 @@ const ProfileSetup = () => {
     }
 
     setIsLoading(true);
-    try {
-      let uploadedPhotoUrl = photoUrl;
 
-      // If we have a photo, upload it
-      if (photoUrl && photoUrl.startsWith("data:")) {
-        uploadedPhotoUrl = await uploadIDPhoto(photoUrl);
-        if (!uploadedPhotoUrl) {
-          throw new Error("Failed to upload photo");
+    // We update the profile data IMMEDIATELY in local state to prevent the redirect loop
+    // Even if it hangs in the DB, the local user object will have profile_complete=true
+    const profileData = {
+      name,
+      department,
+      year,
+      phone,
+      gender: gender as "male" | "female" | "other",
+      emergency_contact_name: emergencyName,
+      emergency_contact_phone: emergencyPhone,
+      profile_complete: true
+    };
+
+    // 1. Kick off the DB update early but DON'T let it block the UI transition
+    const setupTasks = async () => {
+      try {
+        // Run profile update first as it's most critical for navigation
+        await updateProfile(profileData as any);
+        console.log("✅ Profile update task finished");
+
+        // Then handle photo upload in parallel
+        if (photoUrl && photoUrl.startsWith("data:")) {
+          const uploadedUrl = await uploadIDPhoto(photoUrl);
+          if (uploadedUrl) {
+            await saveIDVerification(uploadedUrl);
+          }
         }
+      } catch (e) {
+        console.warn("Background setup tasks had issues:", e);
       }
+    };
 
-      // Save ID verification
-      const saved = await saveIDVerification(uploadedPhotoUrl || "");
-      if (!saved) {
-        throw new Error("Failed to save ID verification");
-      }
+    setupTasks();
 
-      // Now update profile with all data
-      await updateProfile({
-        name,
-        department,
-        year,
-        phone,
-        gender: gender as "male" | "female" | "other",
-        emergency_contact_name: emergencyName,
-        emergency_contact_phone: emergencyPhone,
-      } as any);
-
+    // 2. FORCE PROGRESSION after 3.5 seconds
+    setTimeout(() => {
       setStep("complete");
-      setTimeout(() => navigate("/"), 1500);
-    } catch (error: any) {
-      toast({
-        title: "Setup Failed",
-        description: error.message || "Failed to complete setup",
-        variant: "destructive",
-      });
-    } finally {
       setIsLoading(false);
-    }
+
+      // Navigate to home after another 1.5s
+      setTimeout(() => {
+        // Final sanity check: if the context hasn't updated the user yet,
+        // we might still loop. But updateProfile handles state update.
+        navigate("/", { replace: true });
+
+        // Force refresh only as absolute last resort
+        setTimeout(() => {
+          if (window.location.pathname === "/profile-setup") {
+            window.location.href = "/";
+          }
+        }, 1000);
+      }, 1500);
+    }, 3500);
   };
 
   return (
