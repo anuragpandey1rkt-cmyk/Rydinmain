@@ -21,6 +21,9 @@ import AIAssistant from "./pages/AIAssistant";
 import Profile from "./pages/Profile";
 import Chat from "./pages/Chat";
 import Search from "./pages/Search";
+import Transport from "./pages/Transport";
+import Activity from "./pages/Activity";
+import RideChat from "./pages/RideChat";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -108,6 +111,9 @@ const AppRoutes = () => (
     <Route path="/search" element={<ProtectedRoute><Search /></ProtectedRoute>} />
     <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
     <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+    <Route path="/transport" element={<ProtectedRoute><Transport /></ProtectedRoute>} />
+    <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
+    <Route path="/ride-chat" element={<ProtectedRoute><RideChat /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

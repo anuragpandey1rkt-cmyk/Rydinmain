@@ -15,6 +15,19 @@ export const joinRideAtomic = async (rideId: string, userId: string) => {
 };
 
 /**
+ * Request to join a ride (Approval flow)
+ */
+export const requestJoinRide = async (rideId: string, userId: string) => {
+  const { data, error } = await supabase.rpc('request_join_ride', {
+    p_ride_id: rideId,
+    p_user_id: userId,
+  });
+
+  if (error) throw error;
+  return data;
+};
+
+/**
  * Check if user already joined a ride
  */
 export const isUserInRide = async (rideId: string, userId: string) => {

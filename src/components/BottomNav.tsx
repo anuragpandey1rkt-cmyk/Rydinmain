@@ -1,14 +1,14 @@
-import { Home, Plus, MapPin, Train, Share2, CreditCard, User, MessageSquare, Zap } from "lucide-react";
+import { Home, Plus, MapPin, Train, CreditCard, User, MessageSquare, Plane } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { icon: Home, label: "Home", path: "/" },
-  { icon: Plus, label: "Ride", path: "/create" },
-  { icon: Zap, label: "Hopper", path: "/hopper" },
-  { icon: Share2, label: "Split", path: "/create-split" },
+  { icon: Home, label: "Explore", path: "/" },
+  { icon: Plus, label: "Host Ride", path: "/create" },
+  { icon: Plane, label: "Travel", path: "/travel" },
+  { icon: Train, label: "Public Transport", path: "/transport" },
   { icon: MapPin, label: "Events", path: "/events" },
-  { icon: Train, label: "Travel", path: "/travel" },
+  { icon: MessageSquare, label: "Activity", path: "/activity" },
   { icon: CreditCard, label: "Pay", path: "/settlement" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
@@ -32,7 +32,7 @@ const BottomNav = () => {
               )}
             >
               <Icon className={cn("w-5 h-5", path === "/create" && "w-6 h-6")} />
-              <span className="text-[10px] font-medium">{label}</span>
+              <span className="text-[9px] font-medium leading-tight text-center max-w-[50px] truncate">{label}</span>
             </button>
           );
         })}

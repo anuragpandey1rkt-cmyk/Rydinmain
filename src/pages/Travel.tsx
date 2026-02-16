@@ -185,11 +185,10 @@ const Travel = () => {
   };
 
   const createHopperFromTrip = (trip: MyTrip) => {
-    // Navigate to Hopper page — the user can create a hopper with the trip context
-    // We encode trip info in URL params so Hopper page can pre-fill
+    // Navigate to CreateRide page with trip context
     const tripType = trip.type === "flight" ? "Airport" : "Railway Station";
     navigate(
-      `/hopper?from=SRM Campus&to=${encodeURIComponent(tripType)}&date=${trip.date}&ref=${trip.train_number}`
+      `/create?from=SRM Campus&to=${encodeURIComponent(tripType)}&date=${trip.date}&ref=${trip.train_number}`
     );
   };
 
@@ -386,7 +385,7 @@ const Travel = () => {
               onValueChange={(v) => setMode(v as "train" | "flight" | "shuttle")}
               className="w-full"
             >
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="train">
                   <Train className="w-4 h-4 mr-2" />
                   Train
@@ -394,10 +393,6 @@ const Travel = () => {
                 <TabsTrigger value="flight">
                   <Plane className="w-4 h-4 mr-2" />
                   Flight
-                </TabsTrigger>
-                <TabsTrigger value="shuttle">
-                  <Bus className="w-4 h-4 mr-2" />
-                  Shuttle
                 </TabsTrigger>
               </TabsList>
 
@@ -495,83 +490,7 @@ const Travel = () => {
                 </Card>
               </TabsContent>
 
-              {/* Shuttle Tab */}
-              <TabsContent value="shuttle" className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-green-900">
-                    Check SRM shuttles and buses. Save money if available!
-                  </p>
-                </div>
 
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <p className="text-muted-foreground">Loading shuttle timings...</p>
-                  </div>
-                ) : shuttleTimings.length === 0 ? (
-                  <Card className="p-8 text-center">
-                    <Bus className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                    <p className="text-muted-foreground">
-                      No shuttle timings available yet. Check back soon!
-                    </p>
-                  </Card>
-                ) : (
-                  <div className="space-y-3">
-                    {shuttleTimings.map((shuttle) => (
-                      <motion.div
-                        key={shuttle.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                      >
-                        <Card className="p-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-sm mb-2">
-                                {shuttle.route_name}
-                              </h3>
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-sm">
-                                  <MapPin className="w-4 h-4 text-muted-foreground" />
-                                  <span>{shuttle.from_location}</span>
-                                </div>
-                                <div className="text-xs text-muted-foreground flex items-center gap-2 pl-6">
-                                  <span>↓</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <MapPin className="w-4 h-4 text-muted-foreground" />
-                                  <span>{shuttle.to_location}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="flex items-center gap-1 text-sm font-semibold mb-1">
-                                <Clock className="w-4 h-4" />
-                                {shuttle.departure_time}
-                              </div>
-                              {shuttle.arrival_time && (
-                                <p className="text-xs text-muted-foreground">
-                                  Arrive: {shuttle.arrival_time}
-                                </p>
-                              )}
-                              {shuttle.frequency_minutes && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Every {shuttle.frequency_minutes} mins
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-
-                <Card className="p-4 bg-muted">
-                  <h3 className="font-semibold mb-2">Pro tip:</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Use shuttles whenever possible. They're free and faster than cabs!
-                  </p>
-                </Card>
-              </TabsContent>
             </Tabs>
           </div>
 
@@ -676,7 +595,7 @@ const Travel = () => {
                                     className="flex items-center gap-1 text-xs text-amber-600 font-semibold hover:text-amber-700 transition-colors"
                                   >
                                     <Zap className="w-3 h-3" />
-                                    Create Hopper
+                                    Share a Cab
                                   </button>
                                   <span className="text-muted-foreground">·</span>
                                 </>

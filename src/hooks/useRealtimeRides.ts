@@ -14,6 +14,7 @@ export interface RideWithHost {
   estimated_fare: number;
   girls_only: boolean;
   flight_train: string | null;
+  scheduled_ride_url: string | null;
   host_id: string;
   status: string;
   created_at: string;
@@ -52,7 +53,7 @@ export const useRealtimeRides = (filters?: {
         // Fetch rides first (without joins to avoid relationship cache issues)
         let query = supabase
           .from("rides")
-          .select("id, source, destination, date, time, seats_total, seats_taken, estimated_fare, girls_only, flight_train, host_id, status, created_at");
+          .select("id, source, destination, date, time, seats_total, seats_taken, estimated_fare, girls_only, flight_train, scheduled_ride_url, host_id, status, created_at");
 
         if (filters?.status && filters.status.length > 0) {
           query = query.in("status", filters.status);
@@ -196,7 +197,7 @@ export const useRealtimeRides = (filters?: {
             // Fetch new ride data
             supabase
               .from("rides")
-              .select("id, source, destination, date, time, seats_total, seats_taken, estimated_fare, girls_only, flight_train, host_id, status, created_at")
+              .select("id, source, destination, date, time, seats_total, seats_taken, estimated_fare, girls_only, flight_train, scheduled_ride_url, host_id, status, created_at")
               .eq("id", payload.new.id)
               .maybeSingle()
               .then(({ data: newRide }) => {

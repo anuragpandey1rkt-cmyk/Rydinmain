@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeRides } from "@/hooks/useRealtimeRides";
-import { joinRideAtomic, calculateRideSavings } from "@/lib/database";
+import { requestJoinRide, calculateRideSavings } from "@/lib/database";
 import { debugSupabase } from "@/lib/debugSupabase";
 
 const filters = ["All", "Airport", "Station", "Girls Only"];
@@ -94,20 +94,20 @@ const Index = () => {
     if (!session?.user) return;
 
     try {
-      const result = await joinRideAtomic(id, session.user.id);
+      const result = await requestJoinRide(id, session.user.id);
 
       if (!result.success) {
         toast({
-          title: "Cannot join",
-          description: result.error || "Unable to join ride",
+          title: "Request failed",
+          description: result.error || "Unable to send request",
           variant: "destructive"
         });
         return;
       }
 
       toast({
-        title: "Ride joined! 🎉",
-        description: "You've been added to this ride group."
+        title: "Request sent! 📩",
+        description: "The host will be notified to approve your request."
       });
 
       // Update local state
@@ -251,31 +251,32 @@ const Index = () => {
         ) : (
           <>
             {filteredRides.map((ride, i) => (
-          <RideCard
-            key={ride.id}
-            ride={{
-              id: ride.id,
-              source: ride.source,
-              destination: ride.destination,
-              date: ride.date,
-              time: ride.time,
-              seatsTotal: ride.seats_total,
-              seatsTaken: ride.seats_taken,
-              estimatedFare: ride.estimated_fare,
-              girlsOnly: ride.girls_only,
-              flightTrain: ride.flight_train || undefined,
-              hostName: ride.profiles?.name || "Unknown",
-              hostRating: ride.profiles?.trust_score ?? 4.0,
-              hostDepartment: ride.profiles?.department || "",
-              hostId: ride.host_id,
-              status: ride.status,
-            }}
-            index={i}
-            onJoin={handleJoin}
-            isHost={user?.id === ride.host_id}
-            isJoined={userRides.has(ride.id)}
-          />
-        ))}
+              <RideCard
+                key={ride.id}
+                ride={{
+                  id: ride.id,
+                  source: ride.source,
+                  destination: ride.destination,
+                  date: ride.date,
+                  time: ride.time,
+                  seatsTotal: ride.seats_total,
+                  seatsTaken: ride.seats_taken,
+                  estimatedFare: ride.estimated_fare,
+                  girlsOnly: ride.girls_only,
+                  flightTrain: ride.flight_train || undefined,
+                  hostName: ride.profiles?.name || "Unknown",
+                  hostRating: ride.profiles?.trust_score ?? 4.0,
+                  hostDepartment: ride.profiles?.department || "",
+                  hostId: ride.host_id,
+                  status: ride.status,
+                  scheduled_ride_url: ride.scheduled_ride_url,
+                }}
+                index={i}
+                onJoin={handleJoin}
+                isHost={user?.id === ride.host_id}
+                isJoined={userRides.has(ride.id)}
+              />
+            ))}
           </>
         )}
 

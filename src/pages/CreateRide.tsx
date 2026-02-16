@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { MapPin, Calendar, Clock, Users, Plane, IndianRupee, Shield, ArrowLeft } from "lucide-react";
+import { MapPin, Calendar, Clock, Users, Plane, IndianRupee, Shield, ArrowLeft, Plus, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -15,14 +15,16 @@ const CreateRide = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { session } = useAuth();
+  const [searchParams] = useSearchParams();
   const [girlsOnly, setGirlsOnly] = useState(false);
-  const [source, setSource] = useState("");
-  const [destination, setDestination] = useState("");
-  const [date, setDate] = useState("");
+  const [source, setSource] = useState(searchParams.get("from") || "");
+  const [destination, setDestination] = useState(searchParams.get("to") || "");
+  const [date, setDate] = useState(searchParams.get("date") || "");
   const [time, setTime] = useState("");
-  const [flightTrain, setFlightTrain] = useState("");
+  const [flightTrain, setFlightTrain] = useState(searchParams.get("ref") || "");
   const [seatsTotal, setSeatsTotal] = useState("");
   const [estimatedFare, setEstimatedFare] = useState("");
+  const [scheduledRideUrl, setScheduledRideUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,6 +43,7 @@ const CreateRide = () => {
       estimated_fare: parseFloat(estimatedFare),
       girls_only: girlsOnly,
       flight_train: flightTrain || null,
+      scheduled_ride_url: scheduledRideUrl || null,
       status: 'open',
     });
 
@@ -115,6 +118,21 @@ const CreateRide = () => {
               <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input type="number" placeholder="Est. fare" className="pl-10 h-12 sm:h-11 bg-card text-base sm:text-sm" required value={estimatedFare} onChange={(e) => setEstimatedFare(e.target.value)} />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="relative">
+              <Plus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Scheduled Ride Link (Optional)"
+                className="pl-10 h-12 sm:h-11 bg-card text-base sm:text-sm"
+                value={scheduledRideUrl}
+                onChange={(e) => setScheduledRideUrl(e.target.value)}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground px-1">
+              💡 Tip: Paste your Uber/Ola/Rapido scheduled link for a "Verified" badge.
+            </p>
           </div>
 
           <div className="flex items-center justify-between bg-card border border-border rounded-xl p-3 sm:p-4">

@@ -12,7 +12,12 @@ import { isRideLocked } from "@/lib/rideLock";
 import type { Ride } from "@/data/mockRides";
 
 interface RideCardProps {
-  ride: Ride & { status?: string; bucket_name?: string; locked_at?: string };
+  ride: Ride & {
+    status?: string;
+    bucket_name?: string;
+    locked_at?: string;
+    scheduled_ride_url?: string | null;
+  };
   index: number;
   onJoin?: (id: string) => void;
   onDetails?: (id: string) => void;
@@ -45,7 +50,7 @@ const RideCard = ({ ride, index, onJoin, onDetails, isHost, isJoined }: RideCard
     if (isJoined) return { label: "View", variant: "default" as const };
     if (rideLocked) return { label: "Locked", variant: "outline" as const };
     if (!statusConfig.canJoin) return { label: statusConfig.label, variant: "outline" as const };
-    return { label: "Join", variant: "default" as const };
+    return { label: "Request", variant: "default" as const };
   };
 
   const buttonState = getButtonState();
@@ -139,6 +144,11 @@ const RideCard = ({ ride, index, onJoin, onDetails, isHost, isJoined }: RideCard
                 <Shield className="w-3 h-3" /> Girls only
               </Badge>
             )}
+            {ride.scheduled_ride_url && (
+              <Badge variant="outline" className="text-xs border-green-500 text-green-600 gap-1 bg-green-50">
+                <Check className="w-3 h-3" /> Verified
+              </Badge>
+            )}
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Star className="w-3 h-3 fill-primary text-primary" />
               {ride.hostRating} · {ride.hostName}
@@ -148,7 +158,7 @@ const RideCard = ({ ride, index, onJoin, onDetails, isHost, isJoined }: RideCard
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                if (buttonState.label === "Join" && onJoin && !rideLocked) {
+                if (buttonState.label === "Request" && onJoin && !rideLocked) {
                   onJoin(ride.id);
                 }
               }}
