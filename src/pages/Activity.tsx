@@ -37,6 +37,7 @@ const Activity = () => {
     const [hostedRides, setHostedRides] = useState<any[]>([]);
     const [requestsReceived, setRequestsReceived] = useState<RideRequest[]>([]);
     const [myRequests, setMyRequests] = useState<any[]>([]);
+    const [travelMatches, setTravelMatches] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const fetchData = async () => {
@@ -44,31 +45,123 @@ const Activity = () => {
         setIsLoading(true);
 
         try {
-            // 1. Fetch rides I am hosting
-            const { data: hosted } = await supabase
+            // 1. Fetch rides I am hosting (with basic members)
+            const { data: hosted, error: hostedError } = await supabase
                 .from("rides")
-                .select("*, ride_members(*, profiles(name, department, trust_score, gender))")
+                .select("*, ride_members(*)")
                 .eq("host_id", user.id)
                 .order("date", { ascending: true });
 
+            if (hostedError) throw hostedError;
+
+            // 2. Fetch profiles for all members of my hosted rides
+            if (hosted && hosted.length > 0) {
+                const memberIds = hosted.flatMap(r => (r.ride_members || []).map((m: any) => m.user_id));
+                if (memberIds.length > 0) {
+                    const { data: memberProfiles } = await supabase
+                        .from("profiles")
+                        .select("id, name, department, trust_score, gender")
+                        .in("id", memberIds);
+
+                    const profilesMap = new Map(memberProfiles?.map(p => [p.id, p]));
+
+                    // Attach profiles to members
+                    hosted.forEach(ride => {
+                        if (ride.ride_members) {
+                            ride.ride_members = ride.ride_members.map((m: any) => ({
+                                ...m,
+                                profiles: profilesMap.get(m.user_id) || null
+                            }));
+                        }
+                    });
+                }
+            }
             setHostedRides(hosted || []);
 
-            // 2. Fetch requests I have sent
-            const { data: sent } = await supabase
+            // 3. Fetch requests I have sent (ride_members entries)
+            const { data: sent, error: sentError } = await supabase
                 .from("ride_members")
-                .select("*, rides(*, profiles:host_id(name))")
+                .select(`
+                    *,
+                    rides (
+                        id,
+                        source,
+                        destination,
+                        date,
+                        time,
+                        host_id
+                    )
+                `)
                 .eq("user_id", user.id)
                 .order("joined_at", { ascending: false });
 
-            setMyRequests(sent || []);
+            if (sentError) throw sentError;
 
-            // 3. Collect pending requests for my hosted rides
+            // 4. Batch fetch profiles for the hosts of rides I requested
+            if (sent && sent.length > 0) {
+                const hostIds = [...new Set(sent.map(req => req.rides?.host_id).filter(Boolean))];
+                const { data: hostProfiles } = await supabase
+                    .from("profiles")
+                    .select("id, name")
+                    .in("id", hostIds);
+
+                const hostProfilesMap = new Map(hostProfiles?.map(p => [p.id, p]));
+
+                // Attach host names to the requests
+                const sentWithHosts = sent.map(req => {
+                    if (req.rides) {
+                        return {
+                            ...req,
+                            rides: {
+                                ...req.rides,
+                                profiles: hostProfilesMap.get(req.rides.host_id) || null
+                            }
+                        };
+                    }
+                    return req;
+                });
+                setMyRequests(sentWithHosts);
+            } else {
+                setMyRequests([]);
+            }
+
+            // 5. Collect pending requests for my hosted rides
             const pending = (hosted || []).flatMap(ride =>
                 (ride.ride_members || [])
                     .filter((m: any) => m.status === 'pending')
                     .map((m: any) => ({ ...m, rides: ride }))
             );
             setRequestsReceived(pending);
+
+            // 6. Fetch Travel Matches
+            const { data: myTrips } = await supabase
+                .from("train_info")
+                .select("*")
+                .eq("user_id", user.id);
+
+            if (myTrips && myTrips.length > 0) {
+                const matchResults = await Promise.all(myTrips.map(async (trip) => {
+                    const { data: matches } = await supabase
+                        .from("train_info")
+                        .select("*, profiles:user_id(id, name, department, gender, trust_score)")
+                        .eq("train_number", trip.train_number)
+                        .eq("date", trip.date)
+                        .neq("user_id", user.id);
+
+                    if (matches && matches.length > 0) {
+                        return matches.map(m => ({
+                            ...m,
+                            match_type: trip.train_number.match(/^[A-Z]{2}\s?\d/) ? 'Flight' : 'Train',
+                            my_trip: trip
+                        }));
+                    }
+                    return [];
+                }));
+
+                setTravelMatches(matchResults.flat());
+            } else {
+                setTravelMatches([]);
+            }
 
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -118,7 +211,7 @@ const Activity = () => {
 
             <main className="max-w-lg mx-auto px-4 py-4 space-y-6">
                 <Tabs defaultValue="actions" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 mb-6">
+                    <TabsList className="grid w-full grid-cols-3 mb-6">
                         <TabsTrigger value="actions" className="relative">
                             Approval Hub
                             {requestsReceived.length > 0 && (
@@ -127,7 +220,15 @@ const Activity = () => {
                                 </span>
                             )}
                         </TabsTrigger>
-                        <TabsTrigger value="rides">My Ride Groups</TabsTrigger>
+                        <TabsTrigger value="rides">My Groups</TabsTrigger>
+                        <TabsTrigger value="partners" className="relative">
+                            Partners
+                            {travelMatches.length > 0 && (
+                                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] text-white transform translate-x-1/2 -translate-y-1/2 ring-2 ring-background">
+                                    {travelMatches.length}
+                                </span>
+                            )}
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="actions" className="space-y-6">
@@ -212,17 +313,30 @@ const Activity = () => {
                                                 {req.rides?.date} • Host: {req.rides?.profiles?.name || 'Loading...'}
                                             </p>
                                         </div>
-                                        <Badge
-                                            variant="secondary"
-                                            className={cn(
-                                                "text-[10px] capitalize",
-                                                req.status === 'accepted' && "bg-green-500/10 text-green-600 border-none",
-                                                req.status === 'pending' && "bg-orange-500/10 text-orange-600 border-none",
-                                                req.status === 'rejected' && "bg-red-500/10 text-red-600 border-none"
+                                        <div className="flex items-center gap-2">
+                                            <Badge
+                                                variant="secondary"
+                                                className={cn(
+                                                    "text-[10px] capitalize",
+                                                    req.status === 'accepted' && "bg-green-500/10 text-green-600 border-none",
+                                                    req.status === 'pending' && "bg-orange-500/10 text-orange-600 border-none",
+                                                    req.status === 'rejected' && "bg-red-500/10 text-red-600 border-none",
+                                                    req.status === 'cancelled' && "bg-gray-500/10 text-gray-600 border-none"
+                                                )}
+                                            >
+                                                {req.status}
+                                            </Badge>
+                                            {req.status === 'accepted' && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-8 w-8 p-0 text-primary"
+                                                    onClick={() => navigate(`/ride-chat?rideId=${req.ride_id}`)}
+                                                >
+                                                    <MessageSquare className="w-4 h-4" />
+                                                </Button>
                                             )}
-                                        >
-                                            {req.status}
-                                        </Badge>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -231,6 +345,7 @@ const Activity = () => {
 
                     <TabsContent value="rides" className="space-y-4">
                         <div className="space-y-4">
+                            {/* Hosted Rides */}
                             {hostedRides.map((ride) => {
                                 const acceptedMembers = (ride.ride_members || []).filter((m: any) => m.status === 'accepted');
                                 return (
@@ -238,7 +353,7 @@ const Activity = () => {
                                         <div className="p-4 bg-primary/5 border-b border-primary/10">
                                             <div className="flex justify-between items-start mb-2">
                                                 <h3 className="font-bold text-lg">{ride.destination}</h3>
-                                                <Badge variant="outline" className="bg-background">{ride.status}</Badge>
+                                                <Badge variant="outline" className="bg-background">Host</Badge>
                                             </div>
                                             <p className="text-xs text-muted-foreground flex items-center gap-1">
                                                 <Clock className="w-3 h-3" /> {ride.date} at {ride.time}
@@ -250,7 +365,7 @@ const Activity = () => {
                                                 <p className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Members ({acceptedMembers.length + 1})</p>
                                                 <div className="flex flex-wrap gap-2">
                                                     <Badge variant="secondary" className="bg-primary/10 text-primary border-none text-[10px]">
-                                                        Host (You)
+                                                        You
                                                     </Badge>
                                                     {acceptedMembers.map((m: any) => (
                                                         <Badge key={m.id} variant="outline" className="text-[10px]">
@@ -280,7 +395,128 @@ const Activity = () => {
                                     </div>
                                 );
                             })}
+
+                            {/* Joined Rides */}
+                            {myRequests.filter(req => req.status === 'accepted' && req.rides?.host_id !== user?.id).map((req) => (
+                                <div key={req.ride_id} className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                                    <div className="p-4 bg-muted/20 border-b border-border">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="font-bold text-lg">{req.rides?.destination}</h3>
+                                            <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-none">Member</Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <Clock className="w-3 h-3" /> {req.rides?.date} at {req.rides?.time}
+                                        </p>
+                                    </div>
+
+                                    <div className="p-4 space-y-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                                                {req.rides?.profiles?.name?.[0]}
+                                            </div>
+                                            <div className="text-xs">
+                                                <p className="text-muted-foreground font-medium uppercase text-[8px]">Host</p>
+                                                <p className="font-bold">{req.rides?.profiles?.name}</p>
+                                            </div>
+                                        </div>
+
+                                        <Button
+                                            variant="secondary"
+                                            className="w-full rounded-xl h-10 gap-2"
+                                            onClick={() => navigate(`/ride-chat?rideId=${req.ride_id}`)}
+                                        >
+                                            <MessageSquare className="w-4 h-4" /> Group Chat
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {hostedRides.length === 0 && myRequests.filter(req => req.status === 'accepted' && req.rides?.host_id !== user?.id).length === 0 && (
+                                <div className="text-center py-20 bg-muted/20 rounded-2xl border border-dashed border-border px-4">
+                                    <MessageSquare className="w-10 h-10 text-muted-foreground/20 mx-auto mb-4" />
+                                    <h3 className="font-bold text-muted-foreground">No active groups</h3>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                        Your approved rides and groups will appear here.
+                                    </p>
+                                </div>
+                            )}
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="partners" className="space-y-4">
+                        <section>
+                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-4 flex items-start gap-3">
+                                <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                                <div className="text-xs text-amber-900/80">
+                                    <p className="font-bold text-amber-800">Travel Partners Matched!</p>
+                                    <p>These students are on the same train or flight as you. Reach out to coordinate your journey together.</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                {travelMatches.length === 0 ? (
+                                    <div className="text-center py-20 bg-muted/20 rounded-2xl border border-dashed border-border px-4">
+                                        <Users className="w-10 h-10 text-muted-foreground/20 mx-auto mb-4" />
+                                        <h3 className="font-bold text-muted-foreground">No matches yet</h3>
+                                        <p className="text-xs text-muted-foreground mt-2">
+                                            Add your travel details in the Travel page to find co-travelers.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    travelMatches.map((match) => (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            key={match.id}
+                                            className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm"
+                                        >
+                                            <div className="p-4 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-xl">
+                                                        {match.profiles?.name?.[0]}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <h3 className="font-bold">{match.profiles?.name}</h3>
+                                                            <Badge variant="outline" className="text-[10px] h-4 px-1">
+                                                                ⭐ {match.profiles?.trust_score?.toFixed(1)}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">{match.profiles?.department || 'SRM Student'}</p>
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    className="rounded-xl bg-primary hover:bg-primary/90 text-white gap-2"
+                                                    onClick={() => navigate(`/chat/${match.user_id}`)}
+                                                >
+                                                    <MessageSquare className="w-4 h-4" /> Chat
+                                                </Button>
+                                            </div>
+                                            <div className="px-4 py-3 bg-muted/30 border-t border-border flex items-center justify-between">
+                                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                                    <div className="flex items-center gap-1 font-bold text-amber-600">
+                                                        <Clock className="w-3 h-3" /> Same {match.match_type}
+                                                    </div>
+                                                    <span>•</span>
+                                                    <span>{match.train_number}</span>
+                                                    <span>•</span>
+                                                    <span>{match.date}</span>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 text-[10px] text-primary hover:bg-primary/5 p-0"
+                                                    onClick={() => navigate(`/create?to=${match.match_type === 'Flight' ? 'Airport' : 'Railway Station'}&date=${match.date}&ref=${match.train_number}`)}
+                                                >
+                                                    Invite to Cab <ChevronRight className="w-3 h-3 ml-1" />
+                                                </Button>
+                                            </div>
+                                        </motion.div>
+                                    ))
+                                )}
+                            </div>
+                        </section>
                     </TabsContent>
                 </Tabs>
             </main>

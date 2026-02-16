@@ -24,6 +24,7 @@ import Search from "./pages/Search";
 import Transport from "./pages/Transport";
 import Activity from "./pages/Activity";
 import RideChat from "./pages/RideChat";
+import DirectChat from "./pages/DirectChat";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -114,6 +115,8 @@ const AppRoutes = () => (
     <Route path="/transport" element={<ProtectedRoute><Transport /></ProtectedRoute>} />
     <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
     <Route path="/ride-chat" element={<ProtectedRoute><RideChat /></ProtectedRoute>} />
+    <Route path="/chat/:userId" element={<ProtectedRoute><DirectChat /></ProtectedRoute>} />
+    <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

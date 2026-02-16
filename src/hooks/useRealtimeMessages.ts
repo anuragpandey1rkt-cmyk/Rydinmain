@@ -15,7 +15,7 @@ export interface Message {
 }
 
 export const useRealtimeMessages = (
-  rideId: string,
+  rideId: string | null,
   userId: string,
   otherId: string
 ) => {
@@ -25,26 +25,39 @@ export const useRealtimeMessages = (
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const { data, error } = await supabase
-          .from("messages")
+        let query = supabase
+          .from("direct_messages")
           .select("*, profiles:sender_id (name)")
-          .eq("ride_id", rideId)
           .or(
             `and(sender_id.eq.${userId},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${userId})`
-          )
-          .order("created_at", { ascending: true });
+          );
+
+        if (rideId) {
+          query = query.eq("ride_id", rideId);
+        } else {
+          query = query.is("ride_id", null);
+        }
+
+        const { data, error } = await query.order("created_at", { ascending: true });
 
         if (error) throw error;
         setMessages((data || []) as unknown as Message[]);
 
         // Mark messages as read
-        await supabase
-          .from("messages")
+        let updateQuery = supabase
+          .from("direct_messages")
           .update({ read_at: new Date().toISOString() })
-          .eq("ride_id", rideId)
           .eq("sender_id", otherId)
           .eq("recipient_id", userId)
           .is("read_at", null);
+
+        if (rideId) {
+          updateQuery = updateQuery.eq("ride_id", rideId);
+        } else {
+          updateQuery = updateQuery.is("ride_id", null);
+        }
+
+        await updateQuery;
       } catch (err) {
         console.error("Error fetching messages:", err);
       } finally {
@@ -62,8 +75,7 @@ export const useRealtimeMessages = (
         {
           event: "INSERT",
           schema: "public",
-          table: "messages",
-          filter: `ride_id=eq.${rideId}`,
+          table: "direct_messages",
         },
         (payload) => {
           const newMsg = payload.new as any;
@@ -94,7 +106,7 @@ export const useRealtimeConversations = (userId: string) => {
     const fetchConversations = async () => {
       try {
         const { data, error } = await supabase
-          .from("messages")
+          .from("direct_messages")
           .select(
             `
             id,

@@ -46,50 +46,65 @@ export const isUserInRide = async (rideId: string, userId: string) => {
  * Get ride members with their profile info
  */
 export const getRideMembers = async (rideId: string) => {
-  const { data, error } = await supabase
-    .from('ride_members')
-    .select(`
-      id,
-      user_id,
-      joined_at,
-      payment_status,
-      profiles:user_id (
-        id,
-        name,
-        trust_score,
-        department,
-        gender,
-        phone
-      )
-    `)
-    .eq('ride_id', rideId)
-    .order('joined_at', { ascending: true });
+  try {
+    const { data: members, error: membersError } = await supabase
+      .from('ride_members')
+      .select('id, user_id, joined_at, payment_status, ride_id, status')
+      .eq('ride_id', rideId)
+      .order('joined_at', { ascending: true });
 
-  if (error) throw error;
-  return data;
+    if (membersError) throw membersError;
+    if (!members || members.length === 0) return [];
+
+    const userIds = members.map(m => m.user_id);
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, name, trust_score, department, gender, phone')
+      .in('id', userIds);
+
+    if (profilesError) throw profilesError;
+
+    const profilesMap = new Map(profiles?.map(p => [p.id, p]));
+    return members.map(member => ({
+      ...member,
+      profiles: profilesMap.get(member.user_id) || null
+    }));
+  } catch (error) {
+    console.error("Error in getRideMembers:", error);
+    throw error;
+  }
 };
 
 /**
  * Get ride host info
  */
 export const getRideHost = async (rideId: string) => {
-  const { data, error } = await supabase
-    .from('rides')
-    .select(`
-      host_id,
-      profiles:host_id (
-        id,
-        name,
-        trust_score,
-        department,
-        gender
-      )
-    `)
-    .eq('id', rideId)
-    .maybeSingle();
+  try {
+    const { data: ride, error: rideError } = await supabase
+      .from('rides')
+      .select('host_id')
+      .eq('id', rideId)
+      .maybeSingle();
 
-  if (error) throw error;
-  return data;
+    if (rideError) throw rideError;
+    if (!ride) return null;
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, name, trust_score, department, gender')
+      .eq('id', ride.host_id)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+
+    return {
+      host_id: ride.host_id,
+      profiles: profile
+    };
+  } catch (error) {
+    console.error("Error in getRideHost:", error);
+    throw error;
+  }
 };
 
 /**

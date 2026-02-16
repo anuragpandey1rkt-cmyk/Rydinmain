@@ -65,7 +65,7 @@ const Chat = () => {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.05 }}
-                onClick={() => navigate(`/chat/${conv.id}`)}
+                onClick={() => navigate(`/chat/${conv.other_user_id}`)}
                 className="w-full text-left p-3 sm:p-4 bg-card rounded-lg border border-border hover:border-primary transition-colors"
               >
                 <div className="flex items-start gap-3">

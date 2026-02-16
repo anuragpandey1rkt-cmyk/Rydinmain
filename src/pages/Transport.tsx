@@ -9,23 +9,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import BottomNav from "@/components/BottomNav";
 
 const localTrains = [
-    { route: "Beach - Tambaram/Chengalpattu", freq: "Every 10-15 mins", type: "South Line" },
-    { route: "Central - Avadi/Arakkonam", freq: "Every 15-20 mins", type: "West Line" },
-    { route: "Beach - Velachery (MRTS)", freq: "Every 20 mins", type: "MRTS" },
-    { route: "Central - Gummidipoondi", freq: "Every 30 mins", type: "North Line" },
+    { route: "Beach - Tambaram/Chengalpattu", freq: "Every 10-15 mins", type: "South Line", peak: "8 AM - 11 AM", status: "On Time" },
+    { route: "Central - Avadi/Arakkonam", freq: "Every 15-20 mins", type: "West Line", peak: "9 AM - 12 PM", status: "5m delay" },
+    { route: "Beach - Velachery (MRTS)", freq: "Every 20 mins", type: "MRTS", peak: "8:30 AM - 10:30 AM", status: "On Time" },
+    { route: "Central - Gummidipoondi", freq: "Every 30 mins", type: "North Line", peak: "9 AM - 11 AM", status: "On Time" },
 ];
 
 const busRoutes = [
-    { no: "21G", from: "Tambaram", to: "Broadway", via: "Guindy, Mylapore" },
-    { no: "570", from: "Kelambakkam", to: "CMBT", via: "OMR, Guindy" },
-    { no: "V51", from: "Tambaram", to: "T. Nagar", via: "Velachery" },
-    { no: "102", from: "Kelambakkam", to: "Broadway", via: "OMR" },
+    { no: "21G", from: "Tambaram", to: "Broadway", via: "Guindy, Mylapore", freq: "12m", type: "Deluxe" },
+    { no: "570", from: "Kelambakkam", to: "CMBT", via: "OMR, Guindy", freq: "15m", type: "AC / Express" },
+    { no: "V51", from: "Tambaram", to: "T. Nagar", via: "Velachery", freq: "20m", type: "Normal" },
+    { no: "102", from: "Kelambakkam", to: "Broadway", via: "OMR", freq: "18m", type: "Deluxe" },
+    { no: "A51", from: "Tambaram", to: "High Court", via: "Pallavaram", freq: "15m", type: "Normal" },
 ];
 
 const srmShuttles = [
-    { route: "Campus ↔ Potheri Stn", time: "6:30 AM - 9:00 PM", freq: "Every 10m" },
-    { route: "Campus ↔ Estancia", time: "8:00 AM - 6:00 PM", freq: "Every 20m" },
-    { route: "Campus ↔ Tambaram", time: "7:00 AM, 4:30 PM", freq: "Fixed" },
+    { route: "Campus ↔ Potheri Stn", time: "6:30 AM - 9:30 PM", freq: "Continuous", status: "Live", count: 2 },
+    { route: "Campus ↔ Estancia", time: "8:00 AM - 6:00 PM", freq: "Every 20m", status: "Active", count: 1 },
+    { route: "Campus ↔ Tambaram", time: "7:00 AM, 4:30 PM", freq: "Fixed Timings", status: "Scheduled", count: 0 },
+    { route: "Tech Park ↔ Medical College", time: "8:00 AM - 8:00 PM", freq: "Every 15m", status: "Live", count: 1 },
 ];
 
 const Transport = () => {
@@ -92,15 +94,26 @@ const Transport = () => {
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 key={shuttle.route}
-                                className="bg-card border border-border rounded-xl p-4 flex justify-between items-center"
+                                className="bg-card border border-border rounded-xl p-4 flex justify-between items-center relative overflow-hidden group hover:border-primary/30 transition-all shadow-sm"
                             >
-                                <div>
-                                    <h3 className="font-bold">{shuttle.route}</h3>
-                                    <p className="text-xs text-muted-foreground">{shuttle.time}</p>
+                                <div className="flex gap-4 items-center">
+                                    <div className={`w-2 h-2 rounded-full ${shuttle.status === 'Live' ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`} />
+                                    <div>
+                                        <h3 className="font-bold text-sm sm:text-base">{shuttle.route}</h3>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <p className="text-[10px] text-muted-foreground">{shuttle.time}</p>
+                                            {shuttle.count > 0 && (
+                                                <Badge variant="outline" className="text-[8px] h-4 px-1 py-0 text-green-600 border-green-200 bg-green-50">
+                                                    {shuttle.count} Bus{shuttle.count > 1 ? 'es' : ''} Running
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <Badge variant="secondary" className="bg-primary/5 text-primary border-none">
-                                    {shuttle.freq}
-                                </Badge>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold text-primary uppercase tracking-wider">{shuttle.freq}</p>
+                                    <p className="text-[9px] text-muted-foreground">{shuttle.status}</p>
+                                </div>
                             </motion.div>
                         ))}
                     </TabsContent>
@@ -128,10 +141,17 @@ const Transport = () => {
                                     </Badge>
                                     <Clock className="w-4 h-4 text-muted-foreground" />
                                 </div>
-                                <h3 className="font-bold text-lg mb-1">{train.route}</h3>
-                                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                    Frequency: <span className="text-foreground font-medium">{train.freq}</span>
-                                </p>
+                                <h3 className="font-bold text-base sm:text-lg mb-1">{train.route}</h3>
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                    <div className="text-[10px] text-muted-foreground">
+                                        Frequency
+                                        <p className="text-foreground font-semibold">{train.freq}</p>
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                        Peak Hours
+                                        <p className="text-foreground font-semibold">{train.peak}</p>
+                                    </div>
+                                </div>
                                 <Button variant="ghost" className="w-full mt-3 h-8 text-xs text-primary group-hover:bg-primary/5">
                                     View Full Schedule <ExternalLink className="w-3 h-3 ml-2" />
                                 </Button>
@@ -168,8 +188,8 @@ const Transport = () => {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <Badge variant="outline" className="text-[10px] h-5">AC/Deluxe</Badge>
-                                    <Badge variant="outline" className="text-[10px] h-5">Every 15m</Badge>
+                                    <Badge variant="outline" className="text-[10px] h-5">{bus.type}</Badge>
+                                    <Badge variant="outline" className="text-[10px] h-5">Every {bus.freq}</Badge>
                                 </div>
                             </motion.div>
                         ))}

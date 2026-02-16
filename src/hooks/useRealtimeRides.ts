@@ -314,15 +314,22 @@ export const useRealtimeRideMembers = (rideId: string) => {
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            // Fetch new member with profile
+            // Fetch new member data first
             supabase
               .from("ride_members")
-              .select("*, profiles:user_id(name, trust_score, department, phone)")
+              .select("id, user_id, joined_at, payment_status, ride_id")
               .eq("id", payload.new.id)
               .maybeSingle()
-              .then(({ data }) => {
-                if (data) {
-                  setMembers((prev) => [...prev, data]);
+              .then(async ({ data: newMember }) => {
+                if (newMember) {
+                  // Then fetch their profile
+                  const { data: profile } = await supabase
+                    .from("profiles")
+                    .select("id, name, trust_score, department, phone")
+                    .eq("id", newMember.user_id)
+                    .maybeSingle();
+
+                  setMembers((prev) => [...prev, { ...newMember, profiles: profile }]);
                 }
               });
           } else if (payload.eventType === "DELETE") {

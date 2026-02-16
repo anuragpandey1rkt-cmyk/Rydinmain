@@ -6,7 +6,7 @@ const navItems = [
   { icon: Home, label: "Explore", path: "/" },
   { icon: Plus, label: "Host Ride", path: "/create" },
   { icon: Plane, label: "Travel", path: "/travel" },
-  { icon: Train, label: "Public Transport", path: "/transport" },
+  { icon: Train, label: "Transport", path: "/transport" },
   { icon: MapPin, label: "Events", path: "/events" },
   { icon: MessageSquare, label: "Activity", path: "/activity" },
   { icon: CreditCard, label: "Pay", path: "/settlement" },

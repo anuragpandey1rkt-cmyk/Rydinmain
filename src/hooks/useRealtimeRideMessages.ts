@@ -21,14 +21,33 @@ export const useRealtimeRideMessages = (rideId: string) => {
 
         const fetchMessages = async () => {
             try {
-                const { data, error } = await supabase
+                const { data: rawMessages, error: msgError } = await supabase
                     .from("ride_messages")
-                    .select("*, profiles:user_id (name)")
+                    .select("*")
                     .eq("ride_id", rideId)
                     .order("created_at", { ascending: true });
 
-                if (error) throw error;
-                setMessages((data || []) as unknown as RideMessage[]);
+                if (msgError) throw msgError;
+                if (!rawMessages || rawMessages.length === 0) {
+                    setMessages([]);
+                    return;
+                }
+
+                const userIds = [...new Set(rawMessages.map(m => m.user_id))];
+                const { data: profiles, error: profileError } = await supabase
+                    .from("profiles")
+                    .select("id, name")
+                    .in("id", userIds);
+
+                if (profileError) throw profileError;
+
+                const profilesMap = new Map(profiles?.map(p => [p.id, p]));
+                const messagesWithProfiles = rawMessages.map(msg => ({
+                    ...msg,
+                    profiles: profilesMap.get(msg.user_id) || null
+                }));
+
+                setMessages(messagesWithProfiles as unknown as RideMessage[]);
             } catch (err) {
                 console.error("Error fetching group messages:", err);
             } finally {

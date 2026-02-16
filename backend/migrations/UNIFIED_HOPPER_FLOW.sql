@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS ride_messages (
 ALTER TABLE ride_messages ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Members of the ride can view messages
+DROP POLICY IF EXISTS "Ride members can view messages" ON ride_messages;
 CREATE POLICY "Ride members can view messages"
   ON ride_messages
   FOR SELECT
@@ -28,19 +29,20 @@ CREATE POLICY "Ride members can view messages"
   USING (
     EXISTS (
       SELECT 1 FROM ride_members 
-      WHERE ride_id = ride_messages.ride_id 
-      AND user_id = auth.uid() 
-      AND status = 'accepted'
+      WHERE ride_members.ride_id = ride_messages.ride_id 
+      AND ride_members.user_id = auth.uid() 
+      AND ride_members.status = 'accepted'
     )
     OR
     EXISTS (
       SELECT 1 FROM rides 
-      WHERE id = ride_messages.ride_id 
-      AND host_id = auth.uid()
+      WHERE rides.id = ride_messages.ride_id 
+      AND rides.host_id = auth.uid()
     )
   );
 
 -- Policy: Members can send messages
+DROP POLICY IF EXISTS "Ride members can send messages" ON ride_messages;
 CREATE POLICY "Ride members can send messages"
   ON ride_messages
   FOR INSERT
@@ -48,15 +50,15 @@ CREATE POLICY "Ride members can send messages"
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM ride_members 
-      WHERE ride_id = ride_id 
-      AND user_id = auth.uid() 
-      AND status = 'accepted'
+      WHERE ride_members.ride_id = ride_messages.ride_id 
+      AND ride_members.user_id = auth.uid() 
+      AND ride_members.status = 'accepted'
     )
     OR
     EXISTS (
       SELECT 1 FROM rides 
-      WHERE id = ride_id 
-      AND host_id = auth.uid()
+      WHERE rides.id = ride_messages.ride_id 
+      AND rides.host_id = auth.uid()
     )
   );
 

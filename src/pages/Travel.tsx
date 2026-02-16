@@ -45,6 +45,7 @@ interface CoTraveler {
   user_name?: string;
   user_email?: string;
   user_department?: string;
+  user_id: string;
 }
 
 const Travel = () => {
@@ -174,6 +175,7 @@ const Travel = () => {
           user_name: t.user_name || undefined,
           user_email: t.user_email || undefined,
           user_department: t.user_department || undefined,
+          user_id: t.user_id
         }))
       );
     } catch (err) {
@@ -695,9 +697,19 @@ const Travel = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 text-green-600">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span className="text-xs font-medium">Same trip</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex items-center gap-1 text-green-600">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span className="text-xs font-medium">Same trip</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs text-primary bg-primary/5 hover:bg-primary/10 rounded-lg gap-1"
+                      onClick={() => navigate(`/chat/${ct.user_id}`)}
+                    >
+                      <MessageSquare className="w-3 h-3" /> Chat
+                    </Button>
                   </div>
                 </motion.div>
               ))}
