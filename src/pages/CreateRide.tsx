@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 const CreateRide = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const [searchParams] = useSearchParams();
   const [girlsOnly, setGirlsOnly] = useState(false);
   const [source, setSource] = useState(searchParams.get("from") || "");
@@ -136,11 +136,20 @@ const CreateRide = () => {
           </div>
 
           <div className="flex items-center justify-between bg-card border border-border rounded-xl p-3 sm:p-4">
-            <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-2 ${user?.gender !== 'female' ? "opacity-50" : ""}`}>
               <Shield className="w-4 h-4 text-safety" />
-              <span className="text-sm sm:text-base font-medium">Girls-only ride</span>
+              <div className="flex flex-col">
+                <span className="text-sm sm:text-base font-medium">Girls-only ride</span>
+                {user?.gender !== 'female' && (
+                  <span className="text-[10px] text-muted-foreground">Available for female hosts only</span>
+                )}
+              </div>
             </div>
-            <Switch checked={girlsOnly} onCheckedChange={setGirlsOnly} />
+            <Switch
+              checked={girlsOnly}
+              onCheckedChange={setGirlsOnly}
+              disabled={user?.gender !== 'female'}
+            />
           </div>
 
           {estimatedFare && seatsTotal && (

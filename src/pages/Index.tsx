@@ -84,6 +84,9 @@ const Index = () => {
   }, [rides]);
 
   const filteredRides = rides.filter((ride) => {
+    // Safety check: hide girls only rides from non-females in all views
+    if (ride.girls_only && user?.gender !== 'female') return false;
+
     if (activeFilter === "Airport") return ride.destination.toLowerCase().includes("airport");
     if (activeFilter === "Station") return ride.destination.toLowerCase().includes("station");
     if (activeFilter === "Girls Only") return ride.girls_only;
@@ -92,6 +95,16 @@ const Index = () => {
 
   const handleJoin = async (id: string) => {
     if (!session?.user) return;
+
+    const targetRide = rides.find(r => r.id === id);
+    if (targetRide?.girls_only && user?.gender !== 'female') {
+      toast({
+        title: "Access Restricted",
+        description: "This ride is for female students only.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
       const result = await requestJoinRide(id, session.user.id);
@@ -139,16 +152,18 @@ const Index = () => {
           </div>
 
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-            {filters.map((f) => (
-              <Badge
-                key={f}
-                variant={activeFilter === f ? "default" : "outline"}
-                className="cursor-pointer shrink-0 transition-colors text-xs sm:text-sm"
-                onClick={() => setActiveFilter(f)}
-              >
-                {f}
-              </Badge>
-            ))}
+            {filters
+              .filter(f => f !== "Girls Only" || user?.gender === 'female')
+              .map((f) => (
+                <Badge
+                  key={f}
+                  variant={activeFilter === f ? "default" : "outline"}
+                  className="cursor-pointer shrink-0 transition-colors text-xs sm:text-sm"
+                  onClick={() => setActiveFilter(f)}
+                >
+                  {f}
+                </Badge>
+              ))}
           </div>
         </div>
       </header>
