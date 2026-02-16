@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Users, MapPin, Calendar, Clock, Shield, Share2, Phone, AlertCircle, Heart } from "lucide-react";
+import { X, Users, MapPin, Calendar, Clock, Shield, Share2, Phone, AlertCircle, Heart, ExternalLink, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,6 +24,7 @@ interface RideDetailsModalProps {
     girls_only: boolean;
     flight_train?: string;
     host_id: string;
+    scheduled_ride_url?: string | null;
   };
 }
 
@@ -143,6 +144,34 @@ const RideDetailsModal = ({ rideId, open, onOpenChange, ride }: RideDetailsModal
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Verified Ride Link */}
+            {ride.scheduled_ride_url && (
+              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
+                      <Check className="w-3.5 h-3.5 text-green-600" />
+                    </div>
+                    <p className="text-sm font-bold text-green-700">Verified Ride Link</p>
+                  </div>
+                  <Badge variant="outline" className="bg-green-500/10 text-green-700 border-none text-[10px]">
+                    PRE-BOOKED
+                  </Badge>
+                </div>
+                <p className="text-xs text-green-600/80 mb-2">
+                  The host has already scheduled/booked this ride for transparency.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full bg-white border-green-200 text-green-700 hover:bg-green-50 h-9 rounded-xl"
+                  onClick={() => window.open(ride.scheduled_ride_url || '', '_blank')}
+                >
+                  <ExternalLink className="w-3.5 h-3.5 mr-2" /> View Booking Details
+                </Button>
               </div>
             )}
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { MapPin, Clock, Users, Star, Shield, Plane, ChevronRight, AlertCircle, Lock } from "lucide-react";
+import { MapPin, Clock, Users, Star, Shield, Plane, ChevronRight, AlertCircle, Lock, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -190,6 +190,7 @@ const RideCard = ({ ride, index, onJoin, onDetails, isHost, isJoined }: RideCard
           girls_only: ride.girlsOnly,
           flight_train: ride.flightTrain,
           host_id: ride.hostId || "",
+          scheduled_ride_url: ride.scheduled_ride_url,
         }}
       />
     </>
