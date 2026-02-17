@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeRides } from "@/hooks/useRealtimeRides";
 import { requestJoinRide, calculateRideSavings } from "@/lib/database";
 import { debugSupabase } from "@/lib/debugSupabase";
+import { ModeToggle } from "@/components/ModeToggle";
 
 const filters = ["All", "Airport", "Station", "Girls Only"];
 
@@ -146,9 +147,12 @@ const Index = () => {
                 <MapPin className="w-3 h-3" /> SRM Campus
               </p>
             </div>
-            <Button variant="outline" size="icon" className="h-10 w-10 sm:h-9 sm:w-9">
-              <Filter className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" className="h-10 w-10 sm:h-9 sm:w-9">
+                <Filter className="w-4 h-4" />
+              </Button>
+              <ModeToggle />
+            </div>
           </div>
 
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
