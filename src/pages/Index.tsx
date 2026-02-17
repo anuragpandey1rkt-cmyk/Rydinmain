@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Filter, MapPin, TrendingDown } from "lucide-react";
+import { Filter, MapPin, TrendingDown, ExternalLink, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import RideCard from "@/components/RideCard";
 import BottomNav from "@/components/BottomNav";
 import PlatformDisclaimer from "@/components/PlatformDisclaimer";
@@ -13,11 +14,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeRides } from "@/hooks/useRealtimeRides";
 import { requestJoinRide, calculateRideSavings } from "@/lib/database";
 import { debugSupabase } from "@/lib/debugSupabase";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 const filters = ["All", "Airport", "Station", "Girls Only"];
 
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription, SheetFooter, SheetClose } from "@/components/ui/sheet";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+
+// ... existing imports ...
+
 const Index = () => {
   const [activeFilter, setActiveFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("time"); // "time", "price", "seats"
   const [userRides, setUserRides] = useState<Set<string>>(new Set());
   const [totalSavings, setTotalSavings] = useState(0);
   const { session, user } = useAuth();
@@ -83,16 +95,6 @@ const Index = () => {
     setTotalSavings(savings);
   }, [rides]);
 
-  const filteredRides = rides.filter((ride) => {
-    // Safety check: hide girls only rides from non-females in all views
-    if (ride.girls_only && user?.gender !== 'female') return false;
-
-    if (activeFilter === "Airport") return ride.destination.toLowerCase().includes("airport");
-    if (activeFilter === "Station") return ride.destination.toLowerCase().includes("station");
-    if (activeFilter === "Girls Only") return ride.girls_only;
-    return true;
-  });
-
   const handleJoin = async (id: string) => {
     if (!session?.user) return;
 
@@ -135,20 +137,141 @@ const Index = () => {
     }
   };
 
+  const orderedRides = useMemo(() => {
+    let result = [...rides];
+
+    // 1. Filter
+    result = result.filter((ride) => {
+      // Safety check: hide girls only rides from non-females in all views
+      if (ride.girls_only && user?.gender !== 'female') return false;
+
+      // Search Query
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch =
+          ride.destination.toLowerCase().includes(query) ||
+          ride.source.toLowerCase().includes(query) ||
+          (ride.flight_train && ride.flight_train.toLowerCase().includes(query));
+
+        if (!matchesSearch) return false;
+      }
+
+      if (activeFilter === "Airport") return ride.destination.toLowerCase().includes("airport");
+      if (activeFilter === "Station") return ride.destination.toLowerCase().includes("station");
+      if (activeFilter === "Girls Only") return ride.girls_only;
+      return true;
+    });
+
+    // 2. Sort
+    result.sort((a, b) => {
+      if (sortBy === "price") {
+        return (a.estimated_fare || 0) - (b.estimated_fare || 0);
+      } else if (sortBy === "seats") {
+        const aSeats = (a.seats_total || 0) - (a.seats_taken || 0);
+        const bSeats = (b.seats_total || 0) - (b.seats_taken || 0);
+        return bSeats - aSeats; // Most available first
+      } else {
+        // Default: Time (Earliest first)
+        // Combine date and time to compare correctly if dates differ, essentially usually same day next few hours
+        const dateA = new Date(`${a.date}T${a.time}`);
+        const dateB = new Date(`${b.date}T${b.time}`);
+        return dateA.getTime() - dateB.getTime();
+      }
+    });
+
+    return result;
+  }, [rides, activeFilter, sortBy, user?.gender, searchQuery]);
+
+  // Replace filteredRides usage with orderedRides
+  const filteredRides = orderedRides;
+
+  // ... (keep existing handleJoin) ...
+
   return (
     <div className="min-h-screen bg-background pb-20">
       <header className="sticky top-0 bg-background/80 backdrop-blur-md z-40 border-b border-border">
         <div className="max-w-lg mx-auto px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold font-display">Rydin</h1>
               <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1">
                 <MapPin className="w-3 h-3" /> SRM Campus
               </p>
             </div>
-            <Button variant="outline" size="icon" className="h-10 w-10 sm:h-9 sm:w-9">
-              <Filter className="w-4 h-4" />
-            </Button>
+
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="h-10 w-10 sm:h-9 sm:w-9 relative">
+                  <Filter className="w-4 h-4" />
+                  {sortBy !== 'time' && <div className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full" />}
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[300px] sm:w-[400px]">
+                <SheetHeader>
+                  <SheetTitle>Filters & Sort</SheetTitle>
+                  <SheetDescription>
+                    Customize your ride feed
+                  </SheetDescription>
+                </SheetHeader>
+
+                <div className="grid gap-6 py-6">
+                  {/* Sort Options */}
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-sm text-foreground/80">Sort By</h4>
+                    <RadioGroup value={sortBy} onValueChange={setSortBy} className="gap-3">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="time" id="sort-time" />
+                        <Label htmlFor="sort-time">Earliest Departure (Default)</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="price" id="sort-price" />
+                        <Label htmlFor="sort-price">Price: Low to High</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="seats" id="sort-seats" />
+                        <Label htmlFor="sort-seats">Most Available Seats</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  {/* Filter Options */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-sm text-foreground/80">Preferences</h4>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="girls-only" className="flex flex-col gap-1">
+                        <span>Girls Only Rides</span>
+                        <span className="font-normal text-xs text-muted-foreground">Only show female-exclusive pools</span>
+                      </Label>
+                      <Switch
+                        id="girls-only"
+                        checked={activeFilter === "Girls Only"}
+                        onCheckedChange={(checked) => setActiveFilter(checked ? "Girls Only" : "All")}
+                        disabled={user?.gender !== 'female'}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <SheetFooter>
+                  <SheetClose asChild>
+                    <Button type="submit" className="w-full">Show {orderedRides.length} Rides</Button>
+                  </SheetClose>
+                </SheetFooter>
+              </SheetContent>
+            </Sheet>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search destination, source, or flight/train number..."
+              className="pl-9 h-10 bg-secondary/50 border-transparent focus:bg-background transition-colors"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
 
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -168,7 +291,29 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 sm:px-6 py-4 space-y-3">
+      <main className="max-w-lg mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {/* Install PWA Prompt */}
+        <InstallPrompt />
+
+        {/* WhatsApp Community Banner */}
+        <div className="flex items-center justify-between bg-background border border-border rounded-xl p-4 mb-6 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer group animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-green-100 p-2 rounded-xl group-hover:bg-green-200 transition-colors">
+              <ExternalLink className="w-5 h-5 text-green-600" />
+            </div>
+            <span className="text-sm font-bold text-foreground">Join The Whatsapp Community</span>
+          </div>
+
+          <a
+            href="https://chat.whatsapp.com/CHASTy1E4uiEe62LyT1fzy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center h-9 px-4 text-xs font-bold bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm transition-transform active:scale-95"
+          >
+            Join
+          </a>
+        </div>
+
         {/* Error Banner */}
         {ridesError && (
           <motion.div
@@ -255,10 +400,13 @@ const Index = () => {
           </motion.div>
         )}
 
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            {loading ? "Loading..." : `${filteredRides.length} ride${filteredRides.length !== 1 ? "s" : ""} available`}
-          </p>
+        <div className="flex items-center justify-between pt-2 pb-2">
+          <h2 className="text-lg font-bold font-display text-foreground">
+            Available Rides
+          </h2>
+          <Badge variant="secondary" className="px-2 py-0.5 h-6 text-xs font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80">
+            {loading ? "..." : `${filteredRides.length} found`}
+          </Badge>
         </div>
 
         {loading ? (
