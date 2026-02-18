@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeRides } from "@/hooks/useRealtimeRides";
 import { joinRideAtomic } from "@/lib/database";
+import PlaceAutocomplete from "@/components/PlaceAutocomplete";
 
 const Search = () => {
   const navigate = useNavigate();
@@ -43,6 +44,23 @@ const Search = () => {
   useEffect(() => {
     if (searched && allRides.length > 0) {
       let filtered = allRides;
+
+      // HIDE FULL/LOCKED/EXPIRED rides for non-participants (discovery list)
+      const isMemberOrHost = (ride: any) => user?.id === ride.host_id || userRides.has(ride.id);
+
+      filtered = filtered.filter((ride) => {
+        if ((ride.status === 'full' || ride.status === 'locked' || ride.status === 'expired') && !isMemberOrHost(ride)) {
+          return false;
+        }
+
+        // Hide rides that have already started (date + time comparison)
+        const rideDateTime = new Date(`${ride.date}T${ride.time}`);
+        if (rideDateTime < new Date() && !isMemberOrHost(ride)) {
+          return false;
+        }
+
+        return true;
+      });
 
       if (source.trim()) {
         filtered = filtered.filter((ride) =>
@@ -142,25 +160,15 @@ const Search = () => {
       >
         {/* Search Card */}
         <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="From (e.g., SRM Campus)"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="pl-10 h-11 bg-background text-base sm:text-sm"
-            />
-          </div>
+          <PlaceAutocomplete
+            placeholder="From (e.g., SRM Campus)"
+            onSelect={(p) => setSource(p.name)}
+          />
 
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
-            <Input
-              placeholder="To (e.g., Airport)"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              className="pl-10 h-11 bg-background text-base sm:text-sm"
-            />
-          </div>
+          <PlaceAutocomplete
+            placeholder="To (e.g., Airport)"
+            onSelect={(p) => setDestination(p.name)}
+          />
 
           <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <div className="relative">
