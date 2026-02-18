@@ -28,6 +28,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
+  verifyOtp: (email: string, token: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<void>;
@@ -301,6 +302,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw new Error(error.message);
   };
 
+  const verifyOtp = async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "signup",
+    });
+    if (error) throw new Error(error.message);
+  };
+
   const login = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
@@ -400,6 +410,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!session?.user,
         isLoading,
         signUp,
+        verifyOtp,
         login,
         logout,
         updateProfile,
