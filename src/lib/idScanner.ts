@@ -1,9 +1,10 @@
 /**
- * ID Card Scanner — Robust OCR for SRM ID Cards
- * Handles bad quality photos, rotated images, watermarks, glare
+ * ID Card Scanner — Robust OCR for SRM ID Cards (V2)
+ * Multi-pass OCR with aggressive preprocessing for bad quality photos
+ * Handles: rotated, blurry, watermarked, faded, glare-heavy cards
  */
 
-import { createWorker } from 'tesseract.js';
+import { createWorker, OEM, PSM } from 'tesseract.js';
 
 export interface IDScanResult {
   isValid: boolean;
@@ -16,25 +17,21 @@ export interface IDScanResult {
 }
 
 // ─────────────────────────────────────────────
-// IMAGE PREPROCESSING (Canvas-based)
+// IMAGE PREPROCESSING (Multiple Variants)
 // ─────────────────────────────────────────────
 
-/**
- * Load a base64 image into an HTMLImageElement
- */
-const loadImage = (base64: string): Promise<HTMLImageElement> => {
-  return new Promise((resolve, reject) => {
+const loadImage = (base64: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = base64;
   });
-};
 
 /**
- * Rotate an image by the given degrees (0, 90, 180, 270)
+ * Create a canvas from an image, optionally rotated
  */
-const rotateImage = (img: HTMLImageElement, degrees: number): string => {
+const imageToCanvas = (img: HTMLImageElement, degrees: number = 0): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
 
@@ -50,110 +47,287 @@ const rotateImage = (img: HTMLImageElement, degrees: number): string => {
   ctx.rotate((degrees * Math.PI) / 180);
   ctx.drawImage(img, -img.width / 2, -img.height / 2);
 
-  return canvas.toDataURL('image/jpeg', 0.9);
+  return canvas;
 };
 
 /**
- * Preprocess image for better OCR:
- * - Convert to grayscale
- * - Enhance contrast
- * - Apply sharpening
- * - Resize if too small
+ * Scale canvas to ensure minimum resolution for OCR
+ * Tesseract works best at ~300 DPI (roughly 2000px for an ID card)
  */
-const preprocessImage = (img: HTMLImageElement): string => {
+const scaleCanvas = (source: HTMLCanvasElement, targetMinDim: number = 1200): HTMLCanvasElement => {
+  const minDim = Math.min(source.width, source.height);
+  if (minDim >= targetMinDim) return source;
+
+  const scale = targetMinDim / minDim;
   const canvas = document.createElement('canvas');
+  canvas.width = Math.round(source.width * scale);
+  canvas.height = Math.round(source.height * scale);
+
   const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
 
-  // Scale up small images for better OCR (Tesseract works best at 300 DPI equivalent)
-  let scale = 1;
-  const minDim = Math.min(img.width, img.height);
-  if (minDim < 800) {
-    scale = 800 / minDim;
-  }
-  // Cap at 2x to avoid excessive processing
-  scale = Math.min(scale, 2);
+  return canvas;
+};
 
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
+/**
+ * Convert to grayscale
+ */
+const toGrayscale = (source: HTMLCanvasElement): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(source, 0, 0);
 
-  // Draw scaled image
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-  // Get pixel data
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
+  const d = imageData.data;
 
-  // Pass 1: Convert to grayscale and collect histogram
-  const histogram = new Array(256).fill(0);
-  for (let i = 0; i < data.length; i += 4) {
-    // Weighted grayscale (matches human perception)
-    const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-    data[i] = gray;
-    data[i + 1] = gray;
-    data[i + 2] = gray;
-    histogram[gray]++;
-  }
-
-  // Pass 2: Contrast stretching (histogram equalization light)
-  // Find 5th and 95th percentile for robust stretching
-  const totalPixels = canvas.width * canvas.height;
-  let low = 0, high = 255;
-  let cumSum = 0;
-  for (let i = 0; i < 256; i++) {
-    cumSum += histogram[i];
-    if (cumSum < totalPixels * 0.05) low = i;
-    if (cumSum < totalPixels * 0.95) high = i;
-  }
-
-  const range = Math.max(high - low, 1);
-  const contrastFactor = 1.5; // Extra contrast boost
-
-  for (let i = 0; i < data.length; i += 4) {
-    // Stretch contrast
-    let val = ((data[i] - low) / range) * 255;
-    // Apply additional contrast boost around midpoint
-    val = ((val / 255 - 0.5) * contrastFactor + 0.5) * 255;
-    val = Math.max(0, Math.min(255, Math.round(val)));
-    data[i] = val;
-    data[i + 1] = val;
-    data[i + 2] = val;
-  }
-
-  // Pass 3: Simple sharpening using unsharp mask principle
-  // Clone the blurred version
-  const blurred = new Uint8ClampedArray(data.length);
-  const w = canvas.width;
-  const h = canvas.height;
-
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = (y * w + x) * 4;
-      // 3x3 box blur
-      let sum = 0;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          sum += data[((y + dy) * w + (x + dx)) * 4];
-        }
-      }
-      blurred[idx] = Math.round(sum / 9);
-    }
-  }
-
-  // Sharpen: original + (original - blurred) * amount
-  const sharpenAmount = 0.8;
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = (y * w + x) * 4;
-      const sharpened = data[idx] + (data[idx] - blurred[idx]) * sharpenAmount;
-      const val = Math.max(0, Math.min(255, Math.round(sharpened)));
-      data[idx] = val;
-      data[idx + 1] = val;
-      data[idx + 2] = val;
-    }
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+    d[i] = gray;
+    d[i + 1] = gray;
+    d[i + 2] = gray;
   }
 
   ctx.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/jpeg', 0.92);
+  return canvas;
+};
+
+/**
+ * Adaptive threshold binarization (similar to OpenCV adaptiveThreshold)
+ * Much better than global threshold for uneven lighting / watermarks
+ */
+const adaptiveThreshold = (source: HTMLCanvasElement, blockSize: number = 25, C: number = 10): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(source, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Build integral image for fast mean computation
+  const integral = new Float64Array(w * h);
+  for (let y = 0; y < h; y++) {
+    let rowSum = 0;
+    for (let x = 0; x < w; x++) {
+      rowSum += d[(y * w + x) * 4];
+      integral[y * w + x] = rowSum + (y > 0 ? integral[(y - 1) * w + x] : 0);
+    }
+  }
+
+  // Apply adaptive threshold
+  const half = Math.floor(blockSize / 2);
+  const result = new Uint8ClampedArray(d.length);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const x1 = Math.max(0, x - half);
+      const y1 = Math.max(0, y - half);
+      const x2 = Math.min(w - 1, x + half);
+      const y2 = Math.min(h - 1, y + half);
+
+      const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+      let sum = integral[y2 * w + x2];
+      if (x1 > 0) sum -= integral[y2 * w + (x1 - 1)];
+      if (y1 > 0) sum -= integral[(y1 - 1) * w + x2];
+      if (x1 > 0 && y1 > 0) sum += integral[(y1 - 1) * w + (x1 - 1)];
+
+      const mean = sum / area;
+      const idx = (y * w + x) * 4;
+      const val = d[idx] > (mean - C) ? 255 : 0;
+      result[idx] = val;
+      result[idx + 1] = val;
+      result[idx + 2] = val;
+      result[idx + 3] = 255;
+    }
+  }
+
+  const outData = new ImageData(result, w, h);
+  ctx.putImageData(outData, 0, 0);
+  return canvas;
+};
+
+/**
+ * High contrast stretch - more aggressive than before
+ */
+const highContrast = (source: HTMLCanvasElement): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(source, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+
+  // Find histogram for contrast stretching
+  const hist = new Array(256).fill(0);
+  for (let i = 0; i < d.length; i += 4) hist[d[i]]++;
+
+  const total = canvas.width * canvas.height;
+  let low = 0, high = 255, cum = 0;
+  for (let i = 0; i < 256; i++) {
+    cum += hist[i];
+    if (cum < total * 0.02) low = i;  // 2nd percentile
+    if (cum < total * 0.98) high = i; // 98th percentile
+  }
+
+  const range = Math.max(high - low, 1);
+
+  for (let i = 0; i < d.length; i += 4) {
+    let val = ((d[i] - low) / range) * 255;
+    // Aggressive S-curve contrast
+    val = val / 255;
+    val = val < 0.5
+      ? 2 * val * val
+      : 1 - 2 * (1 - val) * (1 - val);
+    val = Math.max(0, Math.min(255, Math.round(val * 255)));
+    d[i] = val;
+    d[i + 1] = val;
+    d[i + 2] = val;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
+/**
+ * Simple global Otsu threshold binarization
+ */
+const otsuThreshold = (source: HTMLCanvasElement): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(source, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+
+  // Build histogram
+  const hist = new Array(256).fill(0);
+  const total = canvas.width * canvas.height;
+  for (let i = 0; i < d.length; i += 4) hist[d[i]]++;
+
+  // Otsu's method
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+
+  let sumB = 0, wB = 0, maxVariance = 0, threshold = 128;
+
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const variance = wB * wF * (mB - mF) * (mB - mF);
+
+    if (variance > maxVariance) {
+      maxVariance = variance;
+      threshold = t;
+    }
+  }
+
+  // Apply threshold
+  for (let i = 0; i < d.length; i += 4) {
+    const val = d[i] > threshold ? 255 : 0;
+    d[i] = val;
+    d[i + 1] = val;
+    d[i + 2] = val;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
+/**
+ * Invert colors (for cases where text is light on dark due to preprocessing)
+ */
+const invertColors = (source: HTMLCanvasElement): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(source, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = 255 - d[i];
+    d[i + 1] = 255 - d[i + 1];
+    d[i + 2] = 255 - d[i + 2];
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
+/**
+ * Check if an image is mostly black (inverted)
+ */
+const isMostlyDark = (canvas: HTMLCanvasElement): boolean => {
+  const ctx = canvas.getContext('2d')!;
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+  let darkPixels = 0;
+  const total = canvas.width * canvas.height;
+
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i] < 128) darkPixels++;
+  }
+
+  return darkPixels / total > 0.6;
+};
+
+/**
+ * Generate multiple preprocessed versions of the image for multi-pass OCR
+ */
+const generatePreprocessingVariants = (baseCanvas: HTMLCanvasElement): HTMLCanvasElement[] => {
+  const scaled = scaleCanvas(baseCanvas, 1400);
+  const gray = toGrayscale(scaled);
+
+  const variants: HTMLCanvasElement[] = [];
+
+  // Variant 1: Adaptive threshold (best for watermarks & uneven lighting)
+  const adaptive = adaptiveThreshold(gray, 31, 12);
+  if (isMostlyDark(adaptive)) {
+    variants.push(invertColors(adaptive));
+  } else {
+    variants.push(adaptive);
+  }
+
+  // Variant 2: High contrast + Otsu (best for faded text)
+  const contrast = highContrast(gray);
+  const otsu = otsuThreshold(contrast);
+  if (isMostlyDark(otsu)) {
+    variants.push(invertColors(otsu));
+  } else {
+    variants.push(otsu);
+  }
+
+  // Variant 3: Just enhanced grayscale (sometimes simplest works best)
+  variants.push(contrast);
+
+  // Variant 4: Adaptive with smaller block (better for small text/close details)
+  const adaptiveSmall = adaptiveThreshold(gray, 15, 8);
+  if (isMostlyDark(adaptiveSmall)) {
+    variants.push(invertColors(adaptiveSmall));
+  } else {
+    variants.push(adaptiveSmall);
+  }
+
+  return variants;
 };
 
 // ─────────────────────────────────────────────
@@ -161,107 +335,180 @@ const preprocessImage = (img: HTMLImageElement): string => {
 // ─────────────────────────────────────────────
 
 /**
- * Clean OCR noise from extracted text
+ * Common OCR character substitutions to fix
+ */
+const fixOCRSubstitutions = (text: string): string => {
+  return text
+    // Common OCR mistakes
+    .replace(/[|!l1]/g, (match, offset, str) => {
+      // Only fix if surrounded by uppercase letters (likely part of a name)
+      const before = str[offset - 1] || '';
+      const after = str[offset + 1] || '';
+      if (/[A-Z]/.test(before) || /[A-Z]/.test(after)) return 'I';
+      return match;
+    })
+    .replace(/0(?=[A-Z])/g, 'O')  // 0 before uppercase = O
+    .replace(/(?<=[A-Z])0/g, 'O') // 0 after uppercase = O
+    .replace(/5(?=[A-Z])/g, 'S')  // 5 before uppercase = S
+    .replace(/(?<=[A-Z])5/g, 'S') // 5 after uppercase = S
+    .replace(/8(?=[A-Z])/g, 'B')  // 8 before uppercase = B
+    .replace(/(?<=[A-Z])8/g, 'B') // 8 after uppercase = B;
+};
+
+/**
+ * Clean OCR noise — remove watermark artifacts and stray characters
  */
 const cleanOCRText = (text: string): string => {
   return text
-    // Remove common watermark text
-    .replace(/\bSRM\b/gi, '')
-    .replace(/\bOSRM\b/gi, '')
-    .replace(/\bCSRM\b/gi, '')
-    // Remove stray single characters (OCR noise)
-    .replace(/(?:^|\s)[^a-zA-Z\s](?:\s|$)/g, ' ')
-    // Remove numbers mixed into name
+    // Remove SRM watermarks (various OCR readings of the watermark)
+    .replace(/\b[OoC]?SRM\b/gi, '')
+    .replace(/\bSR[MNW]\b/gi, '')
+    .replace(/\bOS[RM][MW]?\b/gi, '')
+    .replace(/\bCSR[MW]?\b/gi, '')
+    // Remove "Institute of Science" fragments that bleed into name
+    .replace(/institute\s*(of)?/gi, '')
+    .replace(/science/gi, '')
+    .replace(/technology/gi, '')
+    // Remove single stray characters
+    .replace(/\b[^a-zA-Z\s]\b/g, '')
+    .replace(/\b[a-zA-Z]\b/g, '') // Single letters (except as initials which we handle separately)
+    // Remove numbers
     .replace(/[0-9]/g, '')
-    // Collapse multiple spaces
+    // Collapse whitespace
     .replace(/\s+/g, ' ')
     .trim();
 };
 
 /**
- * Extract name from OCR text using multiple strategies
- * Designed specifically for SRM ID card format:
- *   Name : FIRSTNAME LASTNAME
- *   Programme : B.Tech.(CSE)
+ * Extract name from OCR text using multiple strategies.
+ * Returns all candidate names found, ranked by confidence.
  */
-const extractNameFromText = (text: string): string | null => {
-  console.log('📄 Raw OCR text:', text);
+const extractNameCandidates = (text: string): string[] => {
+  const candidates: string[] = [];
+  const fixedText = fixOCRSubstitutions(text);
 
-  // Strategy 1: Look for "Name" followed by ":"  and capture until next label
-  // This handles: "Name : VISHAL SINGH", "Name: PRANAV PRATAP SINGH", "Name :PRITHISH MISRA"
+  console.log('📄 Fixed OCR text:', fixedText);
+
+  // Strategy 1: "Name :" label followed by content (primary for SRM cards)
   const namePatterns = [
-    /[Nn]ame\s*[:;]\s*(.+?)(?:\n|Programme|Program|Register|Valid|$)/i,
-    /[Nn]ame\s*[:;]\s*(.+)/i,
-    /[Nn]am[ec]\s*[:;]\s*(.+?)(?:\n|$)/i,
+    // "Name : VISHAL SINGH" — standard format
+    /[Nn][ae]m[ec]?\s*[:;.]\s*[:;.]?\s*(.+?)(?=\s*\n|\s*Programme|\s*Program|\s*Register|\s*Valid|\s*$)/i,
+    // "Name:" without space
+    /[Nn][ae]m[ec]?\s*[:;.]\s*(.+)/i,
+    // Just "Name" followed by text on same line
+    /[Nn]ame\s+([A-Z][A-Z\s]{3,})/,
   ];
 
   for (const pattern of namePatterns) {
-    const match = text.match(pattern);
+    const match = fixedText.match(pattern);
     if (match && match[1]) {
       const cleaned = cleanOCRText(match[1]);
-      // Must have at least 2 chars and contain a letter
-      if (cleaned.length >= 2 && /[a-zA-Z]/.test(cleaned)) {
-        console.log('✅ Name extracted (pattern match):', cleaned);
-        return cleaned;
+      if (cleaned.length >= 3 && /[A-Za-z]{2,}/.test(cleaned)) {
+        candidates.push(cleaned.toUpperCase());
       }
     }
   }
 
-  // Strategy 2: Look for lines with mostly uppercase words (SRM uses ALL CAPS for names)
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
-  for (const line of lines) {
-    // Skip lines that are clearly not names
-    if (/programme|register|valid|faculty|engineering|technology|campus|kattankulathur|chengalpattu|student|website|email|phone/i.test(line)) continue;
-    if (/RA\d{5,}/i.test(line)) continue; // Registration number
-    if (/\d{3,}/.test(line)) continue; // Lines with many numbers
+  // Strategy 2: Find lines between known SRM card labels
+  // On SRM cards: [photo area] → Name : XXX → Programme : YYY → Register No. : ZZZ
+  const lines = fixedText.split('\n').map(l => l.trim()).filter(l => l.length > 1);
 
-    // Check if line has 2+ uppercase words that look like a name
-    const words = line.replace(/[^A-Za-z\s]/g, '').trim().split(/\s+/);
-    const upperWords = words.filter(w => w.length >= 2 && w === w.toUpperCase() && /^[A-Z]+$/.test(w));
-
-    if (upperWords.length >= 2 && upperWords.join(' ').length >= 5) {
-      const nameCandidate = cleanOCRText(upperWords.join(' '));
-      if (nameCandidate.length >= 3) {
-        console.log('✅ Name extracted (uppercase detection):', nameCandidate);
-        return nameCandidate;
-      }
-    }
-  }
-
-  // Strategy 3: Find the line right after a line containing "Name"
   for (let i = 0; i < lines.length; i++) {
-    if (/name/i.test(lines[i]) && !lines[i].includes(':')) {
-      // The name might be on the next line
+    const line = lines[i];
+
+    // If this line contains "Name" and ":"
+    if (/name/i.test(line) && /[:;.]/.test(line)) {
+      // Extract what comes after the ":"
+      const afterColon = line.split(/[:;.]/g).slice(1).join(' ').trim();
+      if (afterColon) {
+        const cleaned = cleanOCRText(afterColon);
+        if (cleaned.length >= 3) {
+          candidates.push(cleaned.toUpperCase());
+        }
+      }
+      // Also check next line (name might wrap)
       if (i + 1 < lines.length) {
-        const cleaned = cleanOCRText(lines[i + 1]);
-        if (cleaned.length >= 3 && /[A-Za-z]/.test(cleaned)) {
-          console.log('✅ Name extracted (next-line):', cleaned);
-          return cleaned;
+        const nextLine = lines[i + 1];
+        if (!/programme|program|register|valid|faculty|b\.?tech/i.test(nextLine)) {
+          const cleaned = cleanOCRText(nextLine);
+          if (cleaned.length >= 3 && /^[A-Za-z\s]+$/.test(cleaned)) {
+            // This might be a continuation of the name (e.g., multi-line name)
+            const prevCandidate = candidates[candidates.length - 1];
+            if (prevCandidate) {
+              candidates.push((prevCandidate + ' ' + cleaned).toUpperCase());
+            }
+            candidates.push(cleaned.toUpperCase());
+          }
         }
       }
     }
   }
 
-  console.log('❌ No name found in OCR text');
-  return null;
+  // Strategy 3: Look for ALL CAPS sequences between known card sections
+  for (const line of lines) {
+    // Skip lines that are clearly NOT names
+    if (/programme|register|valid|faculty|engineering|technology|campus|kattankulathur|chengalp|student|website|email|phone|b\.?tech|cse|mech|civil|eee|ece/i.test(line)) continue;
+    if (/RA\d{4,}/i.test(line)) continue;
+    if (/\d{4,}/.test(line)) continue;
+    if (/jun|may|jan|feb|mar|apr|jul|aug|sep|oct|nov|dec/i.test(line)) continue;
+    if (/www\.|\.com|\.in|\.edu/i.test(line)) continue;
+    if (/044-|ph:/i.test(line)) continue;
+
+    // Find sequences of 2+ uppercase words
+    const capsMatches = line.match(/[A-Z][A-Z]+(?:\s+[A-Z][A-Z]+)*/g);
+    if (capsMatches) {
+      for (const capsMatch of capsMatches) {
+        const cleaned = cleanOCRText(capsMatch);
+        if (cleaned.length >= 4 && cleaned.split(' ').filter(w => w.length >= 2).length >= 1) {
+          candidates.push(cleaned.toUpperCase());
+        }
+      }
+    }
+  }
+
+  // Deduplicate and filter
+  const seen = new Set<string>();
+  return candidates.filter(c => {
+    const normalized = c.replace(/\s+/g, ' ').trim();
+    if (seen.has(normalized) || normalized.length < 3) return false;
+    seen.add(normalized);
+    return true;
+  });
+};
+
+/**
+ * Pick the best name candidate that matches the profile name
+ */
+const pickBestCandidate = (candidates: string[], profileName: string): { name: string; similarity: number } => {
+  if (candidates.length === 0) return { name: '', similarity: 0 };
+
+  let best = { name: candidates[0], similarity: 0 };
+
+  for (const candidate of candidates) {
+    const result = fuzzyNameMatch(profileName, candidate);
+    console.log(`  📊 Candidate "${candidate}" → similarity: ${(result.similarity * 100).toFixed(0)}%`);
+    if (result.similarity > best.similarity) {
+      best = { name: candidate, similarity: result.similarity };
+    }
+  }
+
+  return best;
 };
 
 /**
  * Extract registration number from OCR text
  */
 const extractRegNoFromText = (text: string): string | null => {
-  // SRM registration format: RA followed by digits (e.g., RA2511003010756)
   const regPatterns = [
-    /(?:Register|Reg)\s*(?:No)?\.?\s*[:;]\s*(RA\d{6,})/i,
+    /(?:Register|Reg)\s*(?:No)?\.?\s*[:;.]\s*(RA\d{6,})/i,
     /(RA\d{10,})/i,
+    /(RA\d{8,})/i,
     /([A-Z]{2}\d{10,})/i,
   ];
 
   for (const pattern of regPatterns) {
     const match = text.match(pattern);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
+    if (match && match[1]) return match[1].trim();
   }
   return null;
 };
@@ -270,96 +517,96 @@ const extractRegNoFromText = (text: string): string | null => {
  * Check if text looks like it came from an SRM ID card
  */
 const isSRMCard = (text: string): boolean => {
-  const lowerText = text.toLowerCase();
-  return (
-    lowerText.includes('srm') ||
-    lowerText.includes('faculty') ||
-    lowerText.includes('engineering') ||
-    lowerText.includes('kattankulathur') ||
-    lowerText.includes('programme') ||
-    /ra\d{6,}/i.test(text)
-  );
+  const lower = text.toLowerCase();
+  const score =
+    (lower.includes('srm') ? 1 : 0) +
+    (lower.includes('faculty') ? 1 : 0) +
+    (lower.includes('engineering') ? 1 : 0) +
+    (lower.includes('kattankulathur') ? 1 : 0) +
+    (lower.includes('programme') ? 1 : 0) +
+    (/ra\d{6,}/i.test(text) ? 1 : 0) +
+    (lower.includes('b.tech') || lower.includes('btech') ? 1 : 0);
+  return score >= 2; // At least 2 SRM indicators
 };
 
 // ─────────────────────────────────────────────
-// AUTO-ROTATION OCR
+// MULTI-PASS AUTO-ROTATION OCR
 // ─────────────────────────────────────────────
 
 /**
- * Score how well OCR text matches an expected SRM ID card
+ * Score how well OCR text matches an SRM ID card
  */
 const scoreOCRResult = (text: string): number => {
   let score = 0;
   const lower = text.toLowerCase();
 
-  if (/name\s*[:;]/i.test(text)) score += 50;     // Found "Name :"
+  if (/name\s*[:;.]/i.test(text)) score += 50;
   if (lower.includes('programme')) score += 20;
   if (lower.includes('register')) score += 20;
   if (lower.includes('srm')) score += 10;
   if (lower.includes('faculty')) score += 10;
   if (lower.includes('engineering')) score += 10;
-  if (lower.includes('b.tech') || lower.includes('btech')) score += 15;
-  if (/ra\d{6,}/i.test(text)) score += 25;        // Registration number
+  if (/b\.?\s*tech/i.test(text)) score += 15;
+  if (/ra\d{6,}/i.test(text)) score += 25;
   if (lower.includes('kattankulathur')) score += 10;
   if (lower.includes('valid')) score += 5;
+  if (lower.includes('student')) score += 5;
 
   return score;
 };
 
 /**
- * Try OCR at multiple rotations and pick the best result
+ * Run OCR on a single canvas variant
  */
-const tryAllRotations = async (
+const ocrOnCanvas = async (
+  canvas: HTMLCanvasElement,
+  worker: Awaited<ReturnType<typeof createWorker>>
+): Promise<string> => {
+  const base64 = canvas.toDataURL('image/png'); // PNG for lossless
+  const { data: { text } } = await worker.recognize(base64);
+  return text;
+};
+
+/**
+ * Multi-pass OCR: try all rotations × all preprocessing variants
+ * Pick the result with the highest SRM score
+ */
+const multiPassOCR = async (
   img: HTMLImageElement,
   worker: Awaited<ReturnType<typeof createWorker>>
 ): Promise<{ text: string; rotation: number; score: number }> => {
-  const rotations = [0, 90, 270, 180]; // Most common orientations first
+  const rotations = [0, 90, 270, 180];
   let bestResult = { text: '', rotation: 0, score: -1 };
 
   for (const deg of rotations) {
-    const rotatedBase64 = deg === 0
-      ? preprocessImage(img)
-      : (() => {
-        const rotatedImg = document.createElement('img') as HTMLImageElement;
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
+    console.log(`\n🔄 Trying rotation: ${deg}°`);
 
-        if (deg === 90 || deg === 270) {
-          canvas.width = img.height;
-          canvas.height = img.width;
-        } else {
-          canvas.width = img.width;
-          canvas.height = img.height;
-        }
+    // Create rotated base canvas
+    const rotatedCanvas = imageToCanvas(img, deg);
 
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((deg * Math.PI) / 180);
-        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    // Generate preprocessing variants
+    const variants = generatePreprocessingVariants(rotatedCanvas);
 
-        // Now preprocess the rotated image
-        const tempImg = new Image();
-        return canvas.toDataURL('image/jpeg', 0.9);
-      })();
+    for (let v = 0; v < variants.length; v++) {
+      const text = await ocrOnCanvas(variants[v], worker);
+      const score = scoreOCRResult(text);
 
-    // For non-zero rotations, we need to preprocess the rotated version
-    let processedBase64 = rotatedBase64;
-    if (deg !== 0) {
-      const rotImg = await loadImage(rotatedBase64);
-      processedBase64 = preprocessImage(rotImg);
+      console.log(`  📝 Variant ${v} (rot ${deg}°): score=${score}`);
+
+      if (score > bestResult.score) {
+        bestResult = { text, rotation: deg, score };
+      }
+
+      // Strong match — we found the right orientation + preprocessing
+      if (score >= 100) {
+        console.log(`  ✅ Strong match found! Stopping early.`);
+        return bestResult;
+      }
     }
 
-    const { data: { text } } = await worker.recognize(processedBase64);
-    const score = scoreOCRResult(text);
-
-    console.log(`🔄 Rotation ${deg}°: score=${score}`);
-
-    if (score > bestResult.score) {
-      bestResult = { text, rotation: deg, score };
-    }
-
-    // If we found a very strong match, stop early
-    if (score >= 80) {
-      console.log(`✅ Strong match at ${deg}°, stopping early`);
+    // Good enough match at this rotation — skip remaining rotations
+    if (bestResult.score >= 70) {
+      console.log(`  ✅ Good match at ${deg}°, skipping remaining rotations.`);
       break;
     }
   }
@@ -368,12 +615,9 @@ const tryAllRotations = async (
 };
 
 // ─────────────────────────────────────────────
-// FUZZY NAME MATCHING (Improved)
+// FUZZY NAME MATCHING (Word-level)
 // ─────────────────────────────────────────────
 
-/**
- * Compute Levenshtein distance between two strings
- */
 const levenshtein = (a: string, b: string): number => {
   const matrix: number[][] = [];
   for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -392,22 +636,17 @@ const levenshtein = (a: string, b: string): number => {
   return matrix[b.length][a.length];
 };
 
-/**
- * Normalize a name for comparison
- */
 const normalizeName = (s: string): string =>
-  s.toLowerCase()
-    .replace(/[^a-z\s]/g, '') // Keep only letters and spaces
-    .replace(/\s+/g, ' ')
-    .trim();
+  s.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
 
 /**
  * Improved fuzzy name matching for OCR results
- * Uses multiple strategies:
- * 1. Full string Levenshtein similarity
- * 2. Word-level matching (handles garbled surnames)
- * 3. First-name priority (if first name matches strongly, accept)
- * 4. Contains check (handles middle names)
+ * Strategies:
+ * 1. Full-string Levenshtein similarity
+ * 2. Word-level matching (handles garbled surname)
+ * 3. First-name priority (if first name matches, likely same person)
+ * 4. Substring containment (handles middle names)
+ * 5. Prefix matching (handles truncated OCR output)
  */
 export const fuzzyNameMatch = (
   profileName: string,
@@ -419,64 +658,75 @@ export const fuzzyNameMatch = (
   if (!a || !b) return { match: false, similarity: 0 };
   if (a === b) return { match: true, similarity: 1.0 };
 
-  // 1. Full string Levenshtein similarity
+  // 1. Full-string Levenshtein
   const maxLen = Math.max(a.length, b.length);
-  const dist = levenshtein(a, b);
-  const fullSimilarity = 1 - dist / maxLen;
+  const fullSimilarity = 1 - levenshtein(a, b) / maxLen;
 
   // 2. Word-level matching
   const aWords = a.split(' ').filter(w => w.length >= 2);
   const bWords = b.split(' ').filter(w => w.length >= 2);
 
-  let matchedWords = 0;
-  let totalWords = Math.max(aWords.length, bWords.length);
+  let wordMatchCount = 0;
+  const usedB = new Set<number>();
 
   for (const aw of aWords) {
-    for (const bw of bWords) {
-      const wordDist = levenshtein(aw, bw);
-      const wordSim = 1 - wordDist / Math.max(aw.length, bw.length);
-      if (wordSim >= 0.7) { // 70% per-word match threshold
-        matchedWords++;
-        break;
+    let bestWordSim = 0;
+    let bestIdx = -1;
+
+    for (let j = 0; j < bWords.length; j++) {
+      if (usedB.has(j)) continue;
+      const bw = bWords[j];
+      const wordSim = 1 - levenshtein(aw, bw) / Math.max(aw.length, bw.length);
+
+      // Also check if one is a prefix of the other (OCR truncation)
+      const prefixMatch = aw.startsWith(bw) || bw.startsWith(aw);
+      const effectiveSim = prefixMatch ? Math.max(wordSim, 0.85) : wordSim;
+
+      if (effectiveSim > bestWordSim) {
+        bestWordSim = effectiveSim;
+        bestIdx = j;
       }
+    }
+
+    if (bestWordSim >= 0.6 && bestIdx >= 0) {
+      wordMatchCount++;
+      usedB.add(bestIdx);
     }
   }
 
-  const wordSimilarity = totalWords > 0 ? matchedWords / totalWords : 0;
+  const totalWords = Math.max(aWords.length, bWords.length);
+  const wordSimilarity = totalWords > 0 ? wordMatchCount / totalWords : 0;
 
-  // 3. First-name priority: if profile has a first name that matches any ID word
+  // 3. First-name priority
   const profileFirst = aWords[0] || '';
-  let firstNameMatch = false;
+  let firstNameSim = 0;
   if (profileFirst.length >= 3) {
     for (const bw of bWords) {
-      const fDist = levenshtein(profileFirst, bw);
-      const fSim = 1 - fDist / Math.max(profileFirst.length, bw.length);
-      if (fSim >= 0.75) {
-        firstNameMatch = true;
-        break;
-      }
+      const sim = 1 - levenshtein(profileFirst, bw) / Math.max(profileFirst.length, bw.length);
+      const prefixMatch = profileFirst.startsWith(bw) || bw.startsWith(profileFirst);
+      firstNameSim = Math.max(firstNameSim, prefixMatch ? Math.max(sim, 0.85) : sim);
     }
   }
 
-  // 4. Contains check (handles middle names/initials)
-  const containsMatch = a.includes(b) || b.includes(a) ||
-    aWords.some(w => b.includes(w) && w.length >= 3) ||
-    bWords.some(w => a.includes(w) && w.length >= 3);
+  // 4. Containment check
+  const containsMatch =
+    a.includes(b) || b.includes(a) ||
+    aWords.some(w => w.length >= 3 && bWords.some(bw => bw.includes(w) || w.includes(bw)));
 
-  // Calculate final similarity — weighted combination
+  // 5. Compute best similarity
   let similarity = Math.max(
     fullSimilarity,
-    wordSimilarity * 0.95,  // Word matching is almost as good as full match
-    firstNameMatch ? 0.80 : 0,
+    wordSimilarity * 0.95,
+    firstNameSim >= 0.75 ? Math.max(0.80, firstNameSim * 0.9) : 0,
     containsMatch ? 0.85 : 0
   );
 
-  // Determine match
+  // Final determination
   const isMatch =
-    similarity >= 0.65 ||           // 65% overall (lowered from 75% for OCR tolerance)
-    (firstNameMatch && wordSimilarity >= 0.4) || // First name matches + at least some words
-    (matchedWords >= 2) ||          // At least 2 words match individually
-    containsMatch;                  // One contains the other
+    similarity >= 0.60 ||
+    (firstNameSim >= 0.70 && wordMatchCount >= 1) ||
+    wordMatchCount >= 2 ||
+    containsMatch;
 
   return {
     match: isMatch,
@@ -489,53 +739,68 @@ export const fuzzyNameMatch = (
 // ─────────────────────────────────────────────
 
 /**
- * Process ID card image and extract text
- * Robust pipeline: preprocess → auto-rotate → OCR → SRM-specific extraction
+ * Process ID card image — robust multi-pass OCR pipeline
  */
 export const extractIDText = async (imageBase64: string): Promise<IDScanResult> => {
   try {
-    console.log('🔍 Starting robust OCR pipeline...');
+    console.log('🔍 Starting multi-pass OCR pipeline (V2)...');
 
-    // Load the image
     const img = await loadImage(imageBase64);
     console.log(`📐 Image size: ${img.width}x${img.height}`);
 
-    // Create Tesseract worker
-    const worker = await createWorker('eng');
+    // Create Tesseract worker with optimal settings for ID cards
+    const worker = await createWorker('eng', OEM.LSTM_ONLY, {
+      logger: (m: any) => {
+        if (m.status === 'recognizing text') {
+          console.log(`  ⏳ OCR progress: ${(m.progress * 100).toFixed(0)}%`);
+        }
+      },
+    });
 
-    // Try all rotations with preprocessing to find the best orientation
-    const { text: bestText, rotation, score } = await tryAllRotations(img, worker);
+    // Set Tesseract parameters for better ID card reading
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.SINGLE_BLOCK, // Treat as single block of text
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.:() -/,\n',
+      preserve_interword_spaces: '1',
+    });
+
+    // Run multi-pass OCR with auto-rotation
+    const { text: bestText, rotation, score } = await multiPassOCR(img, worker);
 
     await worker.terminate();
 
-    console.log(`📄 Best OCR result at ${rotation}° (score: ${score}):`);
+    console.log(`\n📄 Best OCR result (rotation: ${rotation}°, score: ${score}):`);
     console.log(bestText);
 
-    // If score is very low, the image is probably not a valid ID
-    if (score < 10) {
+    if (score < 5) {
       return {
         isValid: false,
-        error: 'Could not detect an ID card. Please make sure the entire card is visible and try again.',
+        error: 'Could not detect an ID card. Please ensure the entire card is visible in the photo.',
         imageBase64,
       };
     }
 
-    // Extract name using SRM-specific patterns
-    const name = extractNameFromText(bestText);
+    // Extract candidates using multiple strategies
+    const nameCandidates = extractNameCandidates(bestText);
     const regNo = extractRegNoFromText(bestText);
-    const isSRM = isSRMCard(bestText);
+    const srm = isSRMCard(bestText);
+
+    console.log('🏷️ Name candidates:', nameCandidates);
+
+    // Pick best name (first candidate if no profile comparison needed)
+    const bestName = nameCandidates.length > 0 ? nameCandidates[0] : null;
 
     const result: IDScanResult = {
-      isValid: !!name,
+      isValid: !!bestName,
       imageBase64,
-      confidence: Math.min(score / 100, 1.0),
-      name: name || 'Unknown Student',
+      confidence: Math.min(score / 120, 1.0),
+      name: bestName || 'Could not read name',
       idNumber: regNo || 'Unknown ID',
-      collegeName: isSRM ? 'SRM Institute of Science and Technology' : 'Unknown College',
+      collegeName: srm ? 'SRM Institute of Science and Technology' : 'Unknown College',
     };
 
-    if (!result.isValid || !name) {
-      result.error = 'Could not read the name on your ID. Please try with a clearer photo — hold the card upright and avoid glare.';
+    if (!result.isValid) {
+      result.error = 'Could not read the name from your ID card. Please try again with better lighting and avoid glare on the card.';
     }
 
     return result;
@@ -543,25 +808,18 @@ export const extractIDText = async (imageBase64: string): Promise<IDScanResult> 
     console.error('OCR Processing failed:', error);
     return {
       isValid: false,
-      error: error instanceof Error ? error.message : 'OCR Processing failed. Please try again.',
+      error: error instanceof Error ? error.message : 'OCR failed. Please try again.',
     };
   }
 };
 
 // ─────────────────────────────────────────────
-// CAMERA, UPLOAD, STORAGE (unchanged)
+// CAMERA, STORAGE, UTILITY
 // ─────────────────────────────────────────────
 
-/**
- * Initialize OpenCV.js (kept for compatibility but not required for new pipeline)
- */
-export const initializeOpenCV = (): Promise<void> => {
-  return new Promise((resolve) => resolve());
-};
+export const initializeOpenCV = (): Promise<void> =>
+  new Promise((resolve) => resolve());
 
-/**
- * Capture image from camera
- */
 export const captureFromCamera = async (): Promise<string> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
@@ -569,7 +827,13 @@ export const captureFromCamera = async (): Promise<string> => {
     const ctx = canvas.getContext('2d');
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
+      .getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        }
+      })
       .then((stream) => {
         video.srcObject = stream;
         video.play();
@@ -578,12 +842,13 @@ export const captureFromCamera = async (): Promise<string> => {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
 
+          // Wait longer for camera to auto-focus and stabilize
           setTimeout(() => {
             ctx?.drawImage(video, 0, 0);
             stream.getTracks().forEach((track) => track.stop());
-            const imageBase64 = canvas.toDataURL('image/jpeg', 0.9);
+            const imageBase64 = canvas.toDataURL('image/jpeg', 0.95);
             resolve(imageBase64);
-          }, 300); // Slightly longer delay for camera to stabilize
+          }, 500);
         };
       })
       .catch((error) => {
@@ -592,49 +857,29 @@ export const captureFromCamera = async (): Promise<string> => {
   });
 };
 
-/**
- * Validate ID information
- */
 export const validateIDData = (data: IDScanResult): boolean => {
   if (!data.isValid) return false;
   if (!data.name || data.name.length < 3) return false;
   return true;
 };
 
-/**
- * Convert base64 to Blob
- */
 const base64ToBlob = (base64: string): Blob => {
   const bstr = atob(base64.split(',')[1]);
   const n = bstr.length;
   const u8arr = new Uint8Array(n);
-
-  for (let i = 0; i < n; i++) {
-    u8arr[i] = bstr.charCodeAt(i);
-  }
-
+  for (let i = 0; i < n; i++) u8arr[i] = bstr.charCodeAt(i);
   return new Blob([u8arr], { type: 'image/jpeg' });
 };
 
-/**
- * Upload ID image to Supabase Storage
- */
-export const uploadIDImage = async (
-  imageBase64: string,
-  userId: string
-): Promise<string | null> => {
+export const uploadIDImage = async (imageBase64: string, userId: string): Promise<string | null> => {
   try {
     const { supabase } = await import('@/integrations/supabase/client');
-
     const blob = base64ToBlob(imageBase64);
     const fileName = `id-${userId}-${Date.now()}.jpg`;
 
     const { data, error } = await supabase.storage
       .from('user-verifications')
-      .upload(fileName, blob, {
-        cacheControl: '3600',
-        upsert: true,
-      });
+      .upload(fileName, blob, { cacheControl: '3600', upsert: true });
 
     if (error) throw error;
 
@@ -649,9 +894,6 @@ export const uploadIDImage = async (
   }
 };
 
-/**
- * Save ID verification to database
- */
 export const saveIDVerification = async (
   userId: string,
   imageUrl: string,
@@ -676,7 +918,6 @@ export const saveIDVerification = async (
       throw error;
     }
 
-    // Update profile verification status
     try {
       const { error: profileError } = await supabase
         .from('profiles')
@@ -684,11 +925,8 @@ export const saveIDVerification = async (
         .eq('id', userId);
 
       if (profileError) {
-        console.warn('Profile update with identity_verified failed, trying fallback:', profileError.message);
-        await supabase
-          .from('profiles')
-          .update({ phone_verified: true })
-          .eq('id', userId);
+        console.warn('Profile update fallback:', profileError.message);
+        await supabase.from('profiles').update({ phone_verified: true }).eq('id', userId);
       }
     } catch (profileErr) {
       console.warn('Profile badge update failed (non-critical):', profileErr);
@@ -701,20 +939,15 @@ export const saveIDVerification = async (
   }
 };
 
-/**
- * Check if user is already verified
- */
 export const checkIDVerification = async (userId: string): Promise<boolean> => {
   try {
     const { supabase } = await import('@/integrations/supabase/client');
-
     const { data, error } = await supabase
       .from('user_verifications')
       .select('user_id')
       .eq('user_id', userId)
       .eq('verified', true)
       .maybeSingle();
-
     if (error) throw error;
     return !!data;
   } catch (error) {
@@ -723,30 +956,13 @@ export const checkIDVerification = async (userId: string): Promise<boolean> => {
   }
 };
 
-/**
- * Get verification badge display
- */
-export const getVerificationBadge = (isVerified: boolean) => {
-  if (!isVerified) {
-    return {
-      text: 'Unverified',
-      color: 'text-gray-500',
-      bg: 'bg-gray-100',
-      icon: '○',
-    };
-  }
+export const getVerificationBadge = (isVerified: boolean) => ({
+  text: isVerified ? 'Verified Student' : 'Unverified',
+  color: isVerified ? 'text-green-600' : 'text-gray-500',
+  bg: isVerified ? 'bg-green-100' : 'bg-gray-100',
+  icon: isVerified ? '✓' : '○',
+});
 
-  return {
-    text: 'Verified Student',
-    color: 'text-green-600',
-    bg: 'bg-green-100',
-    icon: '✓',
-  };
-};
-
-/**
- * Format ID number (mask for privacy)
- */
 export const formatIDNumber = (idNumber: string): string => {
   if (idNumber.length <= 4) return idNumber;
   return `****${idNumber.slice(-4)}`;
