@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { X, Users, MapPin, Calendar, Clock, Shield, Share2, MessageSquare, AlertCircle, Heart, ExternalLink, Check } from "lucide-react";
+import { UserTrustBadge } from "@/components/UserTrustBadge";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -140,10 +141,11 @@ const RideDetailsModal = ({ rideId, open, onOpenChange, ride }: RideDetailsModal
                     <p className="text-xs text-muted-foreground">{hostInfo.profiles?.department}</p>
                   </div>
                   <div className="text-right">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-semibold">{hostInfo.profiles?.trust_score?.toFixed(1)}</span>
-                      <Heart className="w-4 h-4 fill-primary text-primary" />
-                    </div>
+                    <UserTrustBadge
+                      trustScore={hostInfo.profiles?.trust_score}
+                      isVerified={!!hostInfo.profiles?.identity_verified}
+                      size="md"
+                    />
                   </div>
                 </div>
               </div>
@@ -188,8 +190,10 @@ const RideDetailsModal = ({ rideId, open, onOpenChange, ride }: RideDetailsModal
                     <div>
                       <p className="text-sm font-semibold">{member.profiles?.name}</p>
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Heart className="w-3 h-3 fill-primary text-primary" />
-                        {member.profiles?.trust_score?.toFixed(1)}
+                        <UserTrustBadge
+                          trustScore={member.profiles?.trust_score}
+                          isVerified={!!member.profiles?.identity_verified}
+                        />
                       </p>
                     </div>
                     {(isMember || isHost) && member.user_id !== user?.id && (

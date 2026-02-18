@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, Users, Check, X, Clock, MapPin, Calendar, ChevronRight, Info, Wallet, Edit2, Trash2, MoreVertical, Settings, Save } from "lucide-react";
+import { UserTrustBadge } from "@/components/UserTrustBadge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +24,7 @@ interface RideRequest {
         department: string | null;
         trust_score: number;
         gender: string;
+        identity_verified?: boolean;
     };
     rides: {
         source: string;
@@ -90,7 +92,7 @@ const Activity = () => {
                 if (memberIds.length > 0) {
                     const { data: memberProfiles } = await supabase
                         .from("profiles")
-                        .select("id, name, department, trust_score, gender")
+                        .select("id, name, department, trust_score, gender, identity_verified")
                         .in("id", memberIds);
 
                     const profilesMap = new Map(memberProfiles?.map(p => [p.id, p]));
@@ -184,7 +186,7 @@ const Activity = () => {
                         const uIds = matches.map(m => m.user_id);
                         const { data: mProfiles } = await supabase
                             .from("profiles")
-                            .select("id, name, department, gender, trust_score")
+                            .select("id, name, department, gender, trust_score, identity_verified")
                             .in("id", uIds);
 
                         const pMap = new Map(mProfiles?.map(p => [p.id, p]));
@@ -384,9 +386,10 @@ const Activity = () => {
                                                         <p className="text-xs text-muted-foreground">{req.profiles.department || 'SRM Student'}</p>
                                                     </div>
                                                 </div>
-                                                <Badge variant="outline" className="text-xs">
-                                                    ⭐ {req.profiles.trust_score.toFixed(1)}
-                                                </Badge>
+                                                <UserTrustBadge
+                                                    trustScore={req.profiles.trust_score}
+                                                    isVerified={!!(req.profiles as any).identity_verified}
+                                                />
                                             </div>
 
                                             <div className="bg-muted/30 rounded-xl p-3 mb-4 space-y-2">
@@ -632,9 +635,10 @@ const Activity = () => {
                                                     <div>
                                                         <div className="flex items-center gap-2">
                                                             <h3 className="font-bold">{match.profiles?.name}</h3>
-                                                            <Badge variant="outline" className="text-[10px] h-4 px-1">
-                                                                ⭐ {match.profiles?.trust_score?.toFixed(1)}
-                                                            </Badge>
+                                                            <UserTrustBadge
+                                                                trustScore={match.profiles?.trust_score}
+                                                                isVerified={!!match.profiles?.identity_verified}
+                                                            />
                                                         </div>
                                                         <p className="text-xs text-muted-foreground">{match.profiles?.department || 'SRM Student'}</p>
                                                     </div>

@@ -11,6 +11,7 @@ export interface Ride {
   flightTrain?: string;
   hostName: string;
   hostRating: number;
+  hostVerified?: boolean;
   hostDepartment: string;
   hostId?: string;
   status?: string;

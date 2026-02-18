@@ -125,6 +125,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       setUser(profile);
       console.log("✅ Profile loaded. profile_complete =", profile.profile_complete);
+
+      // Recalculate trust score in background (fire-and-forget)
+      import('@/lib/trustScore').then(({ recalculateTrustScore }) => {
+        recalculateTrustScore(profile.id).then(newScore => {
+          if (newScore !== profile.trust_score) {
+            setUser(prev => prev ? { ...prev, trust_score: newScore } : prev);
+          }
+        });
+      }).catch(() => { }); // Silent fail
+
       return;
     }
 

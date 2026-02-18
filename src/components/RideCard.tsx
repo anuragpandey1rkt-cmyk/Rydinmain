@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin, Clock, Users, Star, Shield, Plane, ChevronRight, AlertCircle, Lock, Check } from "lucide-react";
+import { UserTrustBadge } from "@/components/UserTrustBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -151,8 +152,8 @@ const RideCard = ({ ride, index, onJoin, onDetails, isHost, isJoined }: RideCard
               </Badge>
             )}
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Star className="w-3 h-3 fill-primary text-primary" />
-              {ride.hostRating} · {ride.hostName}
+              <UserTrustBadge trustScore={ride.hostRating} isVerified={!!ride.hostVerified} />
+              <span className="ml-0.5">· {ride.hostName}</span>
             </span>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
