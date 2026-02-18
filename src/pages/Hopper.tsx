@@ -1,9 +1,10 @@
 import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import { motion } from "framer-motion";
-import { MapPin, Clock, Users, ArrowRight, Plus } from "lucide-react";
+import { MapPin, Clock, Users, ArrowRight, Plus, Users2, Zap, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -18,6 +19,14 @@ import HopperCard from "@/components/HopperCard";
 import { useRealtimeHoppers, type Hopper as HopperType } from "@/hooks/useRealtimeHoppers";
 import { useToast } from "@/hooks/use-toast";
 import { useHopperMatching } from "@/hooks/useHopperMatching";
+import MapPicker from "@/components/MapPicker";
+import PlaceAutocomplete from "@/components/PlaceAutocomplete";
+import { Info, Zap as ZapIcon } from "lucide-react";
+import { useRideClustering } from "@/hooks/useRideClustering";
+import RideClusteringSuggestion from "@/components/RideClusteringSuggestion";
+import { checkSuspiciousActivity, flagUser } from "@/lib/moderation";
+import FallbackTransport from "@/components/FallbackTransport";
+import { useEffect as useEff } from "react";
 
 const Hopper = () => {
   const [mode, setMode] = useState<"view" | "create">("view");
@@ -26,6 +35,8 @@ const Hopper = () => {
   // Create Form State
   const [fromLocation, setFromLocation] = useState("");
   const [toLocation, setToLocation] = useState("");
+  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [dropCoords, setDropCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [departureDate, setDepartureDate] = useState("");
   const [departureTime, setDepartureTime] = useState("");
   const [flexibility, setFlexibility] = useState(30);
@@ -34,21 +45,33 @@ const Hopper = () => {
   // Match Logic State
   const [showMatchesDialog, setShowMatchesDialog] = useState(false);
   const [potentialMatches, setPotentialMatches] = useState<HopperType[]>([]);
-  const { isTimeMatch, isLocationMatch, isDateMatch } = useHopperMatching();
+  const [showAdjustmentDialog, setShowAdjustmentDialog] = useState(false);
+  const { isTimeMatch, isGeospatialMatch, isDateMatch } = useHopperMatching();
+  const { findNearestHub, calculateSavings } = useRideClustering();
+  const [suggestedHub, setSuggestedHub] = useState<{ name: string; center_latitude: number; center_longitude: number } | null>(null);
+  const [savingsValue, setSavingsValue] = useState(0);
 
   // View Filter State
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [demandData, setDemandData] = useState<{ activeUsers: number, ridesForming: number } | null>(null);
 
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const checkMatchesAndCreate = (e: React.FormEvent) => {
+  useEff(() => {
+    // Simulate live demand logic - in production we'd use a real-time presence channel or a table count
+    const active = Math.floor(Math.random() * 8) + 4;
+    const forming = Math.floor(active / 2);
+    setDemandData({ activeUsers: active, ridesForming: forming });
+  }, []);
+
+  const checkMatchesAndCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fromLocation.trim() || !toLocation.trim() || !departureDate || !departureTime) {
+    if (!pickupCoords || !dropCoords || !departureDate || !departureTime) {
       toast({
         title: "Error",
-        description: "Please fill in all fields",
+        description: "Please select locations on map and fill in date/time",
         variant: "destructive",
       });
       return;
@@ -58,11 +81,19 @@ const Hopper = () => {
     const matches = hoppers.filter((h) => {
       if (h.user_id === user?.id) return false; // Don't match own hoppers
 
-      const locMatch = isLocationMatch(fromLocation, h.pickup_location, toLocation, h.drop_location);
+      const locMatch = h.pickup_latitude && h.pickup_longitude && h.drop_latitude && h.drop_longitude
+        ? isGeospatialMatch(
+          pickupCoords,
+          { lat: h.pickup_latitude, lng: h.pickup_longitude },
+          dropCoords,
+          { lat: h.drop_latitude, lng: h.drop_longitude }
+        )
+        : false;
+
       const dateMatch = isDateMatch(departureDate, h.departure_date);
       const timeMatch = isTimeMatch(
         { departureTime, flexibilityMinutes: flexibility },
-        { departureTime: h.departure_time, flexibilityMinutes: 30 } // Schema doesn't have flexibility column
+        { departureTime: h.departure_time, flexibilityMinutes: 30 }
       );
 
       return locMatch && dateMatch && timeMatch;
@@ -70,22 +101,60 @@ const Hopper = () => {
 
     if (matches.length > 0) {
       setPotentialMatches(matches);
+
+      // Intelligent clustering suggestion
+      const hub = await findNearestHub(pickupCoords);
+      if (hub) {
+        setSuggestedHub(hub);
+        setSavingsValue(calculateSavings(250, matches.length + 1));
+      }
+
       setShowMatchesDialog(true);
     } else {
-      executeCreateHopper();
+      // Suggest adjustments if no matches found
+      setShowAdjustmentDialog(true);
     }
   };
 
+  const handleAdjustAndSearch = () => {
+    // Increase flexibility to 60 minutes for better match chance
+    setFlexibility(60);
+    setShowAdjustmentDialog(false);
+    // User can trigger search again with increased flexibility
+    toast({ title: "Flexibility Increased", description: "Search window increased to 1 hour. Try searching again!" });
+  };
+
   const executeCreateHopper = async () => {
-    if (!user) return;
+    if (!user || !pickupCoords || !dropCoords) return;
 
     try {
       setIsCreating(true);
 
+      // Moderation check
+      const modCheck = await checkSuspiciousActivity(user.id);
+      if (modCheck.isSuspicious) {
+        if (modCheck.action === 'flag') {
+          await flagUser(user.id, modCheck.reason || "Suspicious hopper creation pattern.");
+          toast({
+            title: "Account under review",
+            description: "Your account is being reviewed for suspicious behavior. Visibility may be affected.",
+            variant: "destructive"
+          });
+        } else if (modCheck.action === 'block') {
+          toast({ title: "Action Blocked", description: "You cannot create more hoppers right now.", variant: "destructive" });
+          setIsCreating(false);
+          return;
+        }
+      }
+
       const { error } = await supabase.from("hoppers").insert({
         user_id: user.id,
-        pickup_location: fromLocation,
-        drop_location: toLocation,
+        pickup_location: fromLocation || `${pickupCoords.lat.toFixed(4)}, ${pickupCoords.lng.toFixed(4)}`,
+        drop_location: toLocation || `${dropCoords.lat.toFixed(4)}, ${dropCoords.lng.toFixed(4)}`,
+        pickup_latitude: pickupCoords.lat,
+        pickup_longitude: pickupCoords.lng,
+        drop_latitude: dropCoords.lat,
+        drop_longitude: dropCoords.lng,
         departure_date: departureDate,
         departure_time: departureTime,
         seats_total: 4,
@@ -228,6 +297,23 @@ const Hopper = () => {
         </div>
       </div>
 
+      {/* Demand Indicator */}
+      <div className="bg-primary px-4 py-2 flex items-center justify-between text-[11px] font-bold text-primary-foreground uppercase tracking-widest overflow-hidden relative">
+        <motion.div
+          animate={{ x: [-100, 400] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          className="absolute top-0 bottom-0 w-12 bg-white/20 skew-x-12"
+        />
+        <div className="flex items-center gap-2">
+          <Users2 className="w-3 h-3" />
+          <span>{demandData?.activeUsers || 4} Students Searching Nearby</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+          <span>{demandData?.ridesForming || 2} Rides Forming</span>
+        </div>
+      </div>
+
       {/* Content */}
       <div className="max-w-3xl mx-auto px-4 py-6">
         {mode === "view" ? (
@@ -241,13 +327,19 @@ const Hopper = () => {
               <p>Error: {error}</p>
             </div>
           ) : hoppers.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground mb-4">
-                No hoppers available right now
-              </p>
-              <Button onClick={() => setMode("create")}>
-                Create Your Hopper
-              </Button>
+            <div className="space-y-8">
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-4 font-medium text-lg">
+                  No hoppers active right now 🚕
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Button onClick={() => setMode("create")} size="lg">
+                    Create Your Hopper
+                  </Button>
+                </div>
+              </div>
+
+              <FallbackTransport />
             </div>
           ) : (
             <div className="space-y-4">
@@ -277,13 +369,16 @@ const Hopper = () => {
               </div>
 
               {displayedHoppers.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground mb-4">
-                    No hoppers match your filters
-                  </p>
-                  <Button onClick={() => setMode("create")}>
-                    Create Your Hopper
-                  </Button>
+                <div className="space-y-8">
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground mb-4">
+                      No hoppers match your filters
+                    </p>
+                    <Button onClick={() => setMode("create")}>
+                      Create Your Hopper
+                    </Button>
+                  </div>
+                  <FallbackTransport from={filterFrom} to={filterTo} />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -309,43 +404,59 @@ const Hopper = () => {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-md mx-auto"
+            className="max-w-md mx-auto space-y-6"
           >
-            <form onSubmit={checkMatchesAndCreate} className="space-y-4">
-              {/* From Location */}
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Picking up from
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="text"
-                    placeholder="Campus, hostel, home..."
-                    value={fromLocation}
-                    onChange={(e) => setFromLocation(e.target.value)}
-                    className="pl-10 h-12 bg-card"
-                    required
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
+              <Info className="w-5 h-5 text-blue-500 shrink-0" />
+              <p className="text-sm text-blue-700">
+                Select your trip route. Hopper matches you with others heading in the same direction!
+              </p>
+            </div>
+
+            <form onSubmit={checkMatchesAndCreate} className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    Pickup Location
+                  </label>
+                  <PlaceAutocomplete
+                    placeholder="Where are you starting from?"
+                    onSelect={(p) => {
+                      setFromLocation(p.name);
+                      if (p.lat && p.lng) setPickupCoords({ lat: p.lat, lng: p.lng });
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    Destination
+                  </label>
+                  <PlaceAutocomplete
+                    placeholder="Where are you going?"
+                    onSelect={(p) => {
+                      setToLocation(p.name);
+                      if (p.lat && p.lng) setDropCoords({ lat: p.lat, lng: p.lng });
+                    }}
                   />
                 </div>
               </div>
 
-              {/* To Location */}
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Going to
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="text"
-                    placeholder="Airport, station, office..."
-                    value={toLocation}
-                    onChange={(e) => setToLocation(e.target.value)}
-                    className="pl-10 h-12 bg-card"
-                    required
-                  />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Fine-tune on Map</label>
+                  <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider text-primary">Optional</Badge>
                 </div>
+                <MapPicker
+                  initialPickup={pickupCoords || undefined}
+                  initialDrop={dropCoords || undefined}
+                  onSelect={(p, d) => {
+                    setPickupCoords(p);
+                    setDropCoords(d);
+                  }}
+                />
               </div>
 
               {/* Date */}
@@ -430,6 +541,18 @@ const Hopper = () => {
           </DialogHeader>
 
           <div className="space-y-3 max-h-[60vh] overflow-y-auto py-2">
+            {suggestedHub && (
+              <RideClusteringSuggestion
+                hub={suggestedHub}
+                savings={savingsValue}
+                onAccept={() => {
+                  setPickupCoords({ lat: suggestedHub.center_latitude, lng: suggestedHub.center_longitude });
+                  setFromLocation(suggestedHub.name);
+                  executeCreateHopper();
+                }}
+              />
+            )}
+
             {potentialMatches.map(match => (
               <div key={match.id} className="border rounded-lg p-3 bg-muted/20">
                 <div className="flex justify-between items-start mb-2">
@@ -450,6 +573,42 @@ const Hopper = () => {
           <DialogFooter className="flex-col gap-2 sm:gap-0">
             <Button variant="outline" onClick={executeCreateHopper} disabled={isCreating}>
               {isCreating ? "Creating..." : "I still want to create my own"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjustment Dialog */}
+      <Dialog open={showAdjustmentDialog} onOpenChange={setShowAdjustmentDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 mb-4 mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <DialogTitle className="text-center">No Exact Matches Yet</DialogTitle>
+            <DialogDescription className="text-center pt-2">
+              We couldn't find a perfect match for your exact route and time.
+              Would you like to increase your time flexibility?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="bg-muted/30 p-4 rounded-xl space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Smart Suggestions</h4>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0">
+                <RefreshCw className="w-4 h-4" />
+              </div>
+              <p className="text-sm font-medium">Increase time flexibility to 1 hour</p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col gap-2">
+            <Button onClick={handleAdjustAndSearch} className="w-full gap-2 font-bold">
+              Adjust & Search Again
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" onClick={executeCreateHopper} className="w-full text-muted-foreground border-dashed">
+              Create anyway with current settings
             </Button>
           </DialogFooter>
         </DialogContent>
