@@ -212,6 +212,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
 
         if (mounted && currentSession?.user) {
+          // ── SRM domain check on initial load (catches OAuth redirect) ──
+          const email = currentSession.user.email || "";
+          if (!email.toLowerCase().endsWith("@srmist.edu.in")) {
+            console.warn("🚫 Non-SRM session blocked on init:", email);
+            await supabase.auth.signOut();
+            localStorage.setItem("rydin:blocked_email", email);
+            if (mounted) setIsLoading(false);
+            return;
+          }
+          // ───────────────────────────────────────────────────────────────
           setSession(currentSession);
           await fetchProfile(currentSession.user, currentSession);
         }
