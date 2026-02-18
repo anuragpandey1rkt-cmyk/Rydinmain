@@ -29,9 +29,6 @@ interface AuthContextType {
   isLoading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  verifyOtp: (email: string, token: string) => Promise<void>;
-  resendOtp: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -214,16 +211,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
 
         if (mounted && currentSession?.user) {
-          // ── SRM domain check on initial load (catches OAuth redirect) ──
-          const email = currentSession.user.email || "";
-          if (!email.toLowerCase().endsWith("@srmist.edu.in")) {
-            console.warn("🚫 Non-SRM session blocked on init:", email);
-            await supabase.auth.signOut();
-            localStorage.setItem("rydin:blocked_email", email);
-            if (mounted) setIsLoading(false);
-            return;
-          }
-          // ───────────────────────────────────────────────────────────────
           setSession(currentSession);
           await fetchProfile(currentSession.user, currentSession);
         }
@@ -254,21 +241,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("🔔 Auth state change:", event);
       if (!mounted) return;
 
-      // ── SRM domain enforcement for OAuth (Google) ──────────────────────
-      if (newSession?.user) {
-        const email = newSession.user.email || "";
-        if (!email.toLowerCase().endsWith("@srmist.edu.in")) {
-          console.warn("🚫 Non-SRM email blocked:", email);
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
-          // Store in localStorage so Auth page can show toast after redirect
-          localStorage.setItem("rydin:blocked_email", email);
-          return;
-        }
-      }
-      // ───────────────────────────────────────────────────────────────────
-
       setSession(newSession);
 
       if (newSession?.user) {
@@ -296,41 +268,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw new Error(error.message);
   };
 
-  const verifyOtp = async (email: string, token: string) => {
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "signup",
-    });
-    if (error) throw new Error(error.message);
-  };
-
-  const resendOtp = async (email: string) => {
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email,
-    });
-    if (error) throw new Error(error.message);
-  };
-
   const logout = async () => {
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
-  };
-
-  const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
-    });
-    if (error) throw new Error(error.message);
   };
 
   // ──── Profile update ───────────────────────────────────────────────────
@@ -422,9 +363,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         signUp,
         login,
-        signInWithGoogle,
-        verifyOtp,
-        resendOtp,
         logout,
         updateProfile,
         refreshProfile,

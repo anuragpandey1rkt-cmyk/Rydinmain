@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { MapPin } from 'lucide-react';
@@ -41,7 +41,7 @@ interface MapPickerProps {
   focusDrop?: Coords | null;
 }
 
-// â”€â”€ Inner component: listens to map clicks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Inner component: listens to map clicks ────────────────────────────────────
 const ClickHandler = ({
   selecting,
   onPickup,
@@ -60,7 +60,7 @@ const ClickHandler = ({
   return null;
 };
 
-// â”€â”€ Inner component: flies to a coord when it changes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Inner component: flies to a coord when it changes ────────────────────────
 const FlyTo = ({ coord }: { coord: Coords | null | undefined }) => {
   const map = useMap();
   useEffect(() => {
@@ -71,7 +71,7 @@ const FlyTo = ({ coord }: { coord: Coords | null | undefined }) => {
   return null;
 };
 
-// â”€â”€ Main MapPicker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Main MapPicker ────────────────────────────────────────────────────────────
 const MapPicker = ({ onSelect, initialPickup, initialDrop, focusPickup, focusDrop }: MapPickerProps) => {
   const [pickup, setPickup] = useState<Coords | null>(initialPickup || null);
   const [drop, setDrop] = useState<Coords | null>(initialDrop || null);
@@ -112,10 +112,10 @@ const MapPicker = ({ onSelect, initialPickup, initialDrop, focusPickup, focusDro
         <div className="flex flex-col">
           <span className="text-sm font-medium">
             {pickup && drop
-              ? 'âœ“ Both locations pinned'
+              ? '✓ Both locations pinned'
               : selecting === 'pickup'
-                ? 'ðŸ“ Tap map to set pickup'
-                : 'ðŸ“ Tap map to set destination'}
+                ? '📍 Tap map to set pickup'
+                : '📍 Tap map to set destination'}
           </span>
           <span className="text-xs text-muted-foreground">
             Covers all of Chennai & surroundings

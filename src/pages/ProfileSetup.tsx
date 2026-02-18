@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   User, Phone, GraduationCap, Building, ArrowRight,
-  AlertCircle, Camera, Check, X, Upload, Image as ImageIcon
+  AlertCircle, Camera, Check, X, Upload, Image as ImageIcon, Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,16 +261,22 @@ const ProfileSetup = () => {
                 </SelectContent>
               </Select>
 
-              <Select value={gender} onValueChange={(v) => setGender(v as "male" | "female" | "other")} required>
-                <SelectTrigger className="h-12 sm:h-11 bg-card text-base sm:text-sm">
-                  <SelectValue placeholder="Gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="male">Male</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="space-y-1">
+                <Select value={gender} onValueChange={(v) => setGender(v as "male" | "female" | "other")} required>
+                  <SelectTrigger className="h-12 sm:h-11 bg-card text-base sm:text-sm">
+                    <SelectValue placeholder="Gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground px-1 flex items-center gap-1">
+                  <Info className="w-3 h-3 text-primary" />
+                  Gender selection becomes permanent after ID verification for safety.
+                </p>
+              </div>
 
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
