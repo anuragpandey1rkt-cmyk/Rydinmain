@@ -89,15 +89,16 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Redirect if authenticated
+  // Redirect ONLY if authenticated AND email is confirmed
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && user?.email_confirmed_at) {
       navigate(user?.profile_complete ? "/" : "/profile-setup");
     }
   }, [isAuthenticated, user, navigate]);
 
-  // Check for blocked non-SRM Google login
+  // Check for blocked non-SRM Google login OR pending verification
   useEffect(() => {
+    // 1. Non-SRM Block
     const blockedEmail = localStorage.getItem("rydin:blocked_email");
     if (blockedEmail) {
       localStorage.removeItem("rydin:blocked_email");
@@ -108,6 +109,20 @@ const Auth = () => {
         duration: 6000,
       });
       setGoogleLoading(false);
+    }
+
+    // 2. Pending Verification (User signed up but didn't verify OTP yet)
+    const pendingEmail = localStorage.getItem("rydin:pending_verification");
+    if (pendingEmail) {
+      localStorage.removeItem("rydin:pending_verification");
+      setEmail(pendingEmail);
+      setIsSignUp(true); // Keep them in signup mode visually
+      setShowOtp(true);  // Show OTP screen immediately
+      setResendCooldown(60); // Start cooldown
+      toast({
+        title: "Verification Required",
+        description: "Please enter the code sent to your email to continue.",
+      });
     }
   }, [toast]);
 

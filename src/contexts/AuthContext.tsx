@@ -16,10 +16,10 @@ export interface Profile {
   emergency_contact_phone?: string;
   trust_score: number;
   profile_complete: boolean;
-  phone_verified: boolean;
   upi_id?: string;
   avatar_url?: string;
   identity_verified: boolean;
+  email_confirmed_at?: string | null;
 }
 
 interface AuthContextType {
@@ -121,10 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emergency_contact_phone: data.emergency_contact_phone,
         trust_score: data.trust_score ?? 4.0,
         profile_complete: !!data.profile_complete,
-        phone_verified: !!data.phone_verified,
         upi_id: data.upi_id,
         avatar_url: data.avatar_url || undefined,
         identity_verified: !!data.identity_verified,
+        email_confirmed_at: supabaseUser.email_confirmed_at,
       };
       setUser(profile);
       console.log("✅ Profile loaded. profile_complete =", profile.profile_complete);
@@ -151,7 +151,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: supabaseUser.user_metadata?.full_name || "User",
       trust_score: 4.0,
       profile_complete: false,
-      phone_verified: false,
       identity_verified: false,
     };
 
@@ -175,7 +174,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: supabaseUser.user_metadata?.full_name || "User",
           trust_score: 4.0,
           profile_complete: false,
-          phone_verified: false,
         }),
         signal: upsertController.signal,
       });
@@ -214,8 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
 
         if (mounted && currentSession?.user) {
-          // ── SRM domain check on initial load (catches OAuth redirect) ──
           const email = currentSession.user.email || "";
+          // ── SRM domain check ──
           if (!email.toLowerCase().endsWith("@srmist.edu.in")) {
             console.warn("🚫 Non-SRM session blocked on init:", email);
             await supabase.auth.signOut();
@@ -223,7 +221,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (mounted) setIsLoading(false);
             return;
           }
-          // ───────────────────────────────────────────────────────────────
+          // ── Email verification check ──
+          if (!currentSession.user.email_confirmed_at) {
+            console.warn("📧 Unverified email, blocking session:", email);
+            await supabase.auth.signOut();
+            localStorage.setItem("rydin:pending_verification", email);
+            if (mounted) setIsLoading(false);
+            return;
+          }
           setSession(currentSession);
           await fetchProfile(currentSession.user, currentSession);
         }
@@ -262,8 +267,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
           setSession(null);
           setUser(null);
-          // Store in localStorage so Auth page can show toast after redirect
           localStorage.setItem("rydin:blocked_email", email);
+          return;
+        }
+        // ── Block unverified email signups ──
+        if (!newSession.user.email_confirmed_at) {
+          console.warn("📧 Unverified signup session, blocking:", email);
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          localStorage.setItem("rydin:pending_verification", email);
           return;
         }
       }
