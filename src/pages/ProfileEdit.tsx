@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { User, Phone, GraduationCap, Building, ArrowLeft, Check, Save } from "lucide-react";
+import { User, Phone, GraduationCap, Building, ArrowLeft, Check, Save, Info, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -128,22 +128,35 @@ const ProfileEdit = () => {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-medium px-1">Gender</label>
+                            <label className="text-xs font-medium px-1 flex items-center justify-between">
+                                Gender
+                                {user?.identity_verified && (
+                                    <span className="text-[10px] text-safety flex items-center gap-1 font-bold uppercase tracking-wider">
+                                        <Lock className="w-3 h-3" /> Verified & Locked
+                                    </span>
+                                )}
+                            </label>
                             <div className="flex gap-2">
                                 {["male", "female", "other"].map((g) => (
                                     <button
                                         key={g}
                                         type="button"
+                                        disabled={user?.identity_verified}
                                         onClick={() => setGender(g as any)}
                                         className={`flex-1 h-12 rounded-xl text-sm font-medium transition-all border ${gender === g
                                             ? "bg-primary text-primary-foreground border-primary"
                                             : "bg-card border-border text-muted-foreground hover:border-primary/50"
-                                            }`}
+                                            } ${user?.identity_verified ? "opacity-70 cursor-not-allowed" : ""}`}
                                     >
                                         {g.charAt(0).toUpperCase() + g.slice(1)}
                                     </button>
                                 ))}
                             </div>
+                            {user?.identity_verified && (
+                                <p className="text-[10px] text-muted-foreground px-1 mt-1">
+                                    Gender is locked after ID verification. Contact support to change.
+                                </p>
+                            )}
                         </div>
                     </div>
 

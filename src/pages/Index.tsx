@@ -146,6 +146,18 @@ const Index = () => {
       // Safety check: hide girls only rides from non-females in all views
       if (ride.girls_only && user?.gender !== 'female') return false;
 
+      // HIDE FULL/LOCKED/EXPIRED rides for non-participants (discovery list)
+      const isMemberOrHost = user?.id === ride.host_id || userRides.has(ride.id);
+      if ((ride.status === 'full' || ride.status === 'locked' || ride.status === 'expired') && !isMemberOrHost) {
+        return false;
+      }
+
+      // Hide rides that have already started (date + time comparison)
+      const rideDateTime = new Date(`${ride.date}T${ride.time}`);
+      if (rideDateTime < new Date() && !isMemberOrHost) {
+        return false;
+      }
+
       // Search Query
       if (searchQuery) {
         const query = searchQuery.toLowerCase();

@@ -1,4 +1,4 @@
-export type RideStatus = 'open' | 'full' | 'locked' | 'completed' | 'cancelled';
+export type RideStatus = 'open' | 'full' | 'locked' | 'completed' | 'cancelled' | 'expired';
 
 export interface RideStatusConfig {
   status: RideStatus;
@@ -44,6 +44,13 @@ export const rideStatusMap: Record<RideStatus, RideStatusConfig> = {
     color: 'bg-red-100 text-red-800 border-red-300',
     description: 'Ride cancelled',
   },
+  expired: {
+    status: 'expired',
+    canJoin: false,
+    label: 'Expired',
+    color: 'bg-gray-100 text-gray-500 border-gray-300',
+    description: 'Ride time has passed',
+  },
 };
 
 export const getStatusConfig = (status: RideStatus): RideStatusConfig => {
@@ -55,7 +62,7 @@ export const calculateRideStatus = (
   seatsTaken: number,
   status: RideStatus
 ): RideStatus => {
-  if (status === 'locked' || status === 'completed' || status === 'cancelled') {
+  if (status === 'locked' || status === 'completed' || status === 'cancelled' || status === 'expired') {
     return status;
   }
   

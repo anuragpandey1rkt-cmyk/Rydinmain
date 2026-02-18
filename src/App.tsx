@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 import { debugSupabase } from "@/lib/debugSupabase";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { useNearbyRideNotifications } from "@/hooks/useNearbyRideNotifications";
+import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ProfileSetup from "./pages/ProfileSetup";
@@ -28,8 +30,6 @@ import RideChat from "./pages/RideChat";
 import DirectChat from "./pages/DirectChat";
 import ProfileEdit from "./pages/ProfileEdit";
 import NotFound from "./pages/NotFound";
-import Terms from "./pages/Terms";
-import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -114,6 +114,23 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const GlobalHooks = () => {
+  const { isAuthenticated, session } = useAuth();
+
+  // ✅ Always call hooks unconditionally (Rules of Hooks)
+  // The hook itself handles the unauthenticated case via if (!user) return
+  useNearbyRideNotifications();
+
+  useEffect(() => {
+    if (isAuthenticated && session) {
+      // Passive cleanup: trigger ride expiry check on app load (once per session)
+      supabase.rpc('expire_past_rides').then();
+    }
+  }, [isAuthenticated, session]);
+
+  return null;
+};
+
 const AppRoutes = () => (
   <Routes>
     <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
@@ -137,8 +154,6 @@ const AppRoutes = () => (
     <Route path="/ride-chat" element={<ProtectedRoute><RideChat /></ProtectedRoute>} />
     <Route path="/chat/:userId" element={<ProtectedRoute><DirectChat /></ProtectedRoute>} />
     <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-    <Route path="/terms" element={<Terms />} />
-    <Route path="/privacy" element={<Privacy />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
@@ -155,6 +170,7 @@ const App = () => {
       <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
         <TooltipProvider>
           <AuthProvider>
+            <GlobalHooks />
             <Toaster />
             <Sonner />
             <BrowserRouter>

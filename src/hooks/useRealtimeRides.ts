@@ -72,12 +72,27 @@ export const useRealtimeRides = (filters?: {
         // Wrap query execution in a timeout to prevent hanging requests
         // query = query.order("created_at", { ascending: false }); // SAFEGUARD: created_at might be missing
         // Filter out past rides
-        const today = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+        const currentTime = now.toTimeString().split(' ')[0]; // HH:MM:SS
+
+        // Initial query: get rides from today onwards
         query = query.gte("date", today);
         query = query.order("date", { ascending: true });
 
-        // Execute query WITHOUT custom timeout to see real error
-        const { data: ridesData, error: fetchError } = await query;
+        // Execute query
+        const { data: rawRidesData, error: fetchError } = await query;
+
+        // Secondary filtering for rides today that have already departed
+        let ridesData = rawRidesData;
+        if (rawRidesData) {
+          ridesData = rawRidesData.filter(ride => {
+            if (ride.date === today && ride.time < currentTime) {
+              return false;
+            }
+            return true;
+          });
+        }
 
         // Timeout wrapper removed for debugging
         /*
@@ -222,14 +237,20 @@ export const useRealtimeRides = (filters?: {
                 }
               });
           } else if (payload.eventType === "UPDATE") {
-            // Update existing ride
-            setRides((prev) =>
-              prev.map((ride) =>
-                ride.id === payload.new.id
-                  ? { ...ride, ...payload.new }
-                  : ride
-              )
-            );
+            // If ride becomes expired/cancelled/completed, remove it from the active list
+            const inactiveStatuses = ['expired', 'cancelled', 'completed'];
+            if (inactiveStatuses.includes(payload.new.status)) {
+              setRides((prev) => prev.filter((ride) => ride.id !== payload.new.id));
+            } else {
+              // Otherwise update in place
+              setRides((prev) =>
+                prev.map((ride) =>
+                  ride.id === payload.new.id
+                    ? { ...ride, ...payload.new }
+                    : ride
+                )
+              );
+            }
           } else if (payload.eventType === "DELETE") {
             // Remove deleted ride
             setRides((prev) => prev.filter((ride) => ride.id !== payload.old.id));

@@ -14,6 +14,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
+
+
 interface RideRequest {
     id: string;
     ride_id: string;
@@ -804,6 +807,6 @@ const Activity = () => {
     );
 };
 
-const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
+
 
 export default Activity;

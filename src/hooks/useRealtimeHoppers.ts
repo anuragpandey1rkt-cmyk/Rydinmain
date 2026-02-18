@@ -7,6 +7,10 @@ export interface Hopper {
   user_id: string;
   pickup_location: string;
   drop_location: string;
+  pickup_latitude?: number | null;
+  pickup_longitude?: number | null;
+  drop_latitude?: number | null;
+  drop_longitude?: number | null;
   departure_date: string;
   departure_time: string;
   seats_total: number;
