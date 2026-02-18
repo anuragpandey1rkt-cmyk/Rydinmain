@@ -28,6 +28,8 @@ import RideChat from "./pages/RideChat";
 import DirectChat from "./pages/DirectChat";
 import ProfileEdit from "./pages/ProfileEdit";
 import NotFound from "./pages/NotFound";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -120,6 +122,8 @@ const AppRoutes = () => (
     <Route path="/ride-chat" element={<ProtectedRoute><RideChat /></ProtectedRoute>} />
     <Route path="/chat/:userId" element={<ProtectedRoute><DirectChat /></ProtectedRoute>} />
     <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+    <Route path="/terms" element={<Terms />} />
+    <Route path="/privacy" element={<Privacy />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

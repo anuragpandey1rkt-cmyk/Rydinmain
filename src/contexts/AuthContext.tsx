@@ -29,6 +29,7 @@ interface AuthContextType {
   isLoading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -241,6 +242,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("🔔 Auth state change:", event);
       if (!mounted) return;
 
+      // ── SRM domain enforcement for OAuth (Google) ──────────────────────
+      if (newSession?.user) {
+        const email = newSession.user.email || "";
+        if (!email.toLowerCase().endsWith("@srmist.edu.in")) {
+          console.warn("🚫 Non-SRM email blocked:", email);
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          // Store in localStorage so Auth page can show toast after redirect
+          localStorage.setItem("rydin:blocked_email", email);
+          return;
+        }
+      }
+      // ───────────────────────────────────────────────────────────────────
+
       setSession(newSession);
 
       if (newSession?.user) {
@@ -272,6 +288,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
+  };
+
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    });
+    if (error) throw new Error(error.message);
   };
 
   // ──── Profile update ───────────────────────────────────────────────────
@@ -363,6 +393,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         signUp,
         login,
+        signInWithGoogle,
         logout,
         updateProfile,
         refreshProfile,
