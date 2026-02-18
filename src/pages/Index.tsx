@@ -438,6 +438,7 @@ const Index = () => {
                   flightTrain: ride.flight_train || undefined,
                   hostName: ride.profiles?.name || "Unknown",
                   hostRating: ride.profiles?.trust_score ?? 4.0,
+                  hostVerified: !!ride.profiles?.identity_verified,
                   hostDepartment: ride.profiles?.department || "",
                   hostId: ride.host_id,
                   status: ride.status,

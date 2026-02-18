@@ -18,7 +18,7 @@ export interface RideWithHost {
   host_id: string;
   status: string;
   created_at: string;
-  profiles: { name: string; trust_score: number; department: string | null } | null;
+  profiles: { name: string; trust_score: number; department: string | null; identity_verified?: boolean } | null;
 }
 
 export const useRealtimeRides = (filters?: {
@@ -118,7 +118,7 @@ export const useRealtimeRides = (filters?: {
           const hostIds = [...new Set(ridesData.map(r => r.host_id))];
           const { data: profilesData, error: profilesError } = await supabase
             .from("profiles")
-            .select("id, name, trust_score, department")
+            .select("id, name, trust_score, department, identity_verified")
             .in("id", hostIds);
 
           if (!profilesError && profilesData) {
@@ -208,7 +208,7 @@ export const useRealtimeRides = (filters?: {
                   // Fetch host profile
                   supabase
                     .from("profiles")
-                    .select("id, name, trust_score, department")
+                    .select("id, name, trust_score, department, identity_verified")
                     .eq("id", newRide.host_id)
                     .maybeSingle()
                     .then(({ data: profile }) => {
@@ -270,7 +270,7 @@ export const useRealtimeRideMembers = (rideId: string) => {
           const userIds = membersData.map(m => m.user_id);
           const { data: profilesData, error: profilesError } = await supabase
             .from("profiles")
-            .select("id, name, trust_score, department, phone")
+            .select("id, name, trust_score, department, phone, identity_verified")
             .in("id", userIds);
 
           if (!profilesError && profilesData) {
@@ -328,7 +328,7 @@ export const useRealtimeRideMembers = (rideId: string) => {
                   // Then fetch their profile
                   const { data: profile } = await supabase
                     .from("profiles")
-                    .select("id, name, trust_score, department, phone")
+                    .select("id, name, trust_score, department, phone, identity_verified")
                     .eq("id", newMember.user_id)
                     .maybeSingle();
 

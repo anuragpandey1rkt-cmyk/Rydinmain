@@ -19,6 +19,7 @@ export interface Profile {
   phone_verified: boolean;
   upi_id?: string;
   avatar_url?: string;
+  identity_verified: boolean;
 }
 
 interface AuthContextType {
@@ -119,10 +120,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile_complete: !!data.profile_complete,
         phone_verified: !!data.phone_verified,
         upi_id: data.upi_id,
-        avatar_url: data.avatar_url,
+        avatar_url: data.avatar_url || undefined,
+        identity_verified: !!data.identity_verified,
       };
       setUser(profile);
       console.log("✅ Profile loaded. profile_complete =", profile.profile_complete);
+
+      // Recalculate trust score in background (fire-and-forget)
+      import('@/lib/trustScore').then(({ recalculateTrustScore }) => {
+        recalculateTrustScore(profile.id).then(newScore => {
+          if (newScore !== profile.trust_score) {
+            setUser(prev => prev ? { ...prev, trust_score: newScore } : prev);
+          }
+        });
+      }).catch(() => { }); // Silent fail
+
       return;
     }
 
@@ -137,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       trust_score: 4.0,
       profile_complete: false,
       phone_verified: false,
+      identity_verified: false,
     };
 
     // Use direct REST for the upsert too, to avoid the same RLS hang

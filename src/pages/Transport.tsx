@@ -205,26 +205,67 @@ const calculateUpcomingTrains = (station: string, currentTime: Date) => {
 };
 
 const busRoutes = [
-    { no: "102", from: "Broadway", to: "Kelambakkam", via: "Guindy, Pallavaram, Chrompet", freq: "10m", type: "Express", timing: "4:45 AM - 7:55 PM", fare: "₹15-35", electric: false, status: "On Time", popular: true },
-    { no: "570", from: "CMBT Koyambedu", to: "Kelambakkam", via: "Velachery, Siruseri, OMR", freq: "12m", type: "AC Express", timing: "4:50 AM - 9:15 PM", fare: "₹15-50", electric: true, status: "Live", popular: true },
-    { no: "114", from: "Redhills", to: "Vandalur Zoo", via: "Koyambedu, Tambaram, SRM", freq: "15m", type: "Electric", timing: "5:00 AM - 10:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: true },
-    { no: "A1", from: "High Court", to: "Tambaram", via: "Guindy, Pallavaram", freq: "8m", type: "Deluxe", timing: "4:50 AM - 10:00 PM", fare: "₹10-40", electric: false, status: "On Time", popular: true },
+    // === 500-SERIES: GST Road Corridor (Most useful for SRM KTR students) ===
+    { no: "500", from: "Tambaram", to: "Chengalpattu", via: "Perungalathur, Vandalur, Guduvanchery, Potheri, Kattankulathur", freq: "8m", type: "Ordinary", timing: "4:10 AM - 3:45 AM", fare: "₹5-20", electric: false, status: "Live", popular: true },
+    { no: "500A", from: "Hasthinapuram", to: "Chengalpattu", via: "Tambaram, Vandalur, Guduvanchery, Potheri, SRM", freq: "25m", type: "Express", timing: "5:30 AM - 9:07 PM", fare: "₹8-30", electric: false, status: "Live", popular: true },
+    { no: "500D", from: "Durga Nagar", to: "Chengalpattu", via: "Tambaram, Perungalathur, Vandalur, Guduvanchery, Potheri", freq: "20m", type: "Express", timing: "6:00 AM - 8:55 PM", fare: "₹8-30", electric: false, status: "On Time", popular: true },
+    { no: "500E", from: "Tambaram", to: "Anjur (Echankarnai)", via: "Guduvanchery, Potheri, Maraimalainagar", freq: "30m", type: "Ordinary", timing: "6:00 AM - 9:10 PM", fare: "₹5-20", electric: false, status: "On Time", popular: false },
+    { no: "500W", from: "Saidapet", to: "Chengalpattu", via: "Guindy, Tambaram, Vandalur, Potheri, Kattankulathur", freq: "30m", type: "Deluxe", timing: "6:15 AM - 6:30 PM", fare: "₹10-40", electric: false, status: "On Time", popular: true },
+    { no: "500ET", from: "Tambaram", to: "Chengalpattu", via: "Perungalathur, Vandalur, Guduvanchery, Potheri", freq: "10m", type: "Electric", timing: "5:00 AM - 10:30 PM", fare: "₹5-20", electric: true, status: "Live", popular: true },
+    { no: "500R", from: "Tambaram", to: "Chengalpattu", via: "Vandalur, Guduvanchery, Potheri, Singaperumal Koil", freq: "15m", type: "Express", timing: "5:30 AM - 9:30 PM", fare: "₹8-25", electric: false, status: "On Time", popular: false },
+
+    // === KEY SRM CORRIDOR ROUTES (Tambaram-Vandalur-Guduvanchery) ===
+    { no: "114", from: "Redhills", to: "Vandalur Zoo", via: "Koyambedu, Guindy, Tambaram, SRM", freq: "15m", type: "Electric", timing: "5:00 AM - 10:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: true },
+    { no: "M52ET", from: "Guduvanchery", to: "Chromepet", via: "Vandalur Zoo, Perungalathur, Tambaram", freq: "12m", type: "Electric", timing: "5:30 AM - 9:30 PM", fare: "₹5-15", electric: true, status: "Live", popular: true },
+    { no: "55", from: "Vandalur", to: "Tambaram", via: "Perungalathur, Tambaram Sanatorium", freq: "10m", type: "Ordinary", timing: "5:00 AM - 10:00 PM", fare: "₹5-10", electric: false, status: "On Time", popular: false },
+    { no: "91C", from: "Vandalur Zoo", to: "Velachery", via: "Tambaram MEPZ, Chromepet, Pallavaram", freq: "15m", type: "Deluxe", timing: "5:30 AM - 9:30 PM", fare: "₹10-35", electric: false, status: "On Time", popular: false },
+    { no: "118", from: "Tambaram", to: "Maraimalainagar", via: "Guduvanchery, Potheri, Kattankulathur", freq: "20m", type: "Ordinary", timing: "5:30 AM - 9:00 PM", fare: "₹5-15", electric: false, status: "On Time", popular: false },
+    { no: "XE18", from: "T.Nagar", to: "Guduvanchery", via: "Saidapet, Guindy, Tambaram, Vandalur", freq: "20m", type: "Express", timing: "5:30 AM - 9:00 PM", fare: "₹8-30", electric: false, status: "On Time", popular: false },
+    { no: "XG18", from: "High Court", to: "Guduvanchery", via: "Guindy, Chromepet, Tambaram, Vandalur", freq: "25m", type: "Express", timing: "6:00 AM - 8:30 PM", fare: "₹8-35", electric: false, status: "On Time", popular: false },
+
+    // === TAMBARAM HUB ROUTES (Key transit point for SRM students) ===
+    { no: "A1", from: "High Court", to: "Tambaram", via: "Saidapet, Guindy, Pallavaram, Chromepet", freq: "8m", type: "Deluxe", timing: "4:50 AM - 10:00 PM", fare: "₹10-40", electric: false, status: "On Time", popular: true },
+    { no: "A51", from: "High Court", to: "Tambaram East", via: "Guindy, Chromepet", freq: "12m", type: "Deluxe", timing: "5:00 AM - 9:30 PM", fare: "₹10-40", electric: false, status: "On Time", popular: false },
+    { no: "1B", from: "Tambaram", to: "Thiruvottiyur", via: "Chromepet, Guindy, Central, Broadway", freq: "12m", type: "Express", timing: "4:30 AM - 10:00 PM", fare: "₹8-35", electric: false, status: "On Time", popular: false },
+    { no: "M70CNS", from: "Tambaram", to: "Koyambedu CMBT", via: "Chromepet, Pallavaram, Guindy, Vadapalani", freq: "15m", type: "Ordinary", timing: "5:00 AM - 9:30 PM", fare: "₹5-25", electric: false, status: "On Time", popular: false },
+    { no: "S100", from: "Chennai Airport", to: "Tambaram East", via: "Pallavaram, Chromepet, MIT", freq: "20m", type: "AC", timing: "6:00 AM - 10:00 PM", fare: "₹15-30", electric: false, status: "On Time", popular: false },
+
+    // === BROADWAY / CENTRAL / EGMORE ROUTES (For city travel) ===
+    { no: "102", from: "Broadway", to: "Kelambakkam", via: "Guindy, Pallavaram, Chromepet, Tambaram", freq: "10m", type: "Express", timing: "4:45 AM - 7:55 PM", fare: "₹15-35", electric: false, status: "On Time", popular: true },
     { no: "18A", from: "Broadway", to: "Kilambakkam", via: "Guindy, Tambaram, Potheri", freq: "10m", type: "Electric", timing: "5:00 AM - 9:30 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
-    { no: "588", from: "Adyar", to: "Mamallapuram", via: "OMR, ECR, Kovalam", freq: "30m", type: "Deluxe", timing: "6:00 AM - 8:00 PM", fare: "₹10-40", electric: false, status: "On Time", popular: false },
-    { no: "19", from: "T.Nagar", to: "Thiruporur", via: "Velachery, OMR, Kelambakkam", freq: "20m", type: "Electric", timing: "5:30 AM - 9:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
-    { no: "77", from: "CMBT", to: "Ambattur Estate", via: "Koyambedu, Ambattur", freq: "5m", type: "Ordinary", timing: "4:30 AM - 11:00 PM", fare: "₹5-23", electric: false, status: "On Time", popular: false },
-    { no: "23C", from: "Ayanavaram", to: "Besant Nagar", via: "T.Nagar, Adyar", freq: "12m", type: "Express", timing: "4:05 AM - 8:10 PM", fare: "₹8-35", electric: false, status: "On Time", popular: false },
-    { no: "29C", from: "Perambur", to: "Velachery", via: "Egmore, T.Nagar, Guindy", freq: "10m", type: "Deluxe", timing: "5:00 AM - 10:30 PM", fare: "₹10-40", electric: false, status: "On Time", popular: false },
-    { no: "170TX", from: "Poonamallee", to: "Sholinganallur", via: "Vadapalani, Guindy, OMR", freq: "15m", type: "Electric", timing: "5:30 AM - 9:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
-    { no: "164E", from: "Tondiarpet", to: "Velachery", via: "Broadway, T.Nagar, Guindy", freq: "12m", type: "Electric", timing: "5:00 AM - 9:30 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
-    { no: "M27", from: "T.Nagar", to: "CMBT Koyambedu", via: "Vadapalani, Virugambakkam", freq: "8m", type: "Ordinary", timing: "5:00 AM - 10:00 PM", fare: "₹5-23", electric: false, status: "On Time", popular: false },
-    { no: "202X", from: "Avadi", to: "Kilambakkam", via: "Koyambedu, Guindy, Tambaram", freq: "25m", type: "Express", timing: "5:30 AM - 8:30 PM", fare: "₹8-35", electric: false, status: "On Time", popular: false },
-    { no: "C33", from: "Circular Route", to: "K.Kannadasan Nagar", via: "Anna Nagar, Vadapalani", freq: "20m", type: "Electric", timing: "6:00 AM - 9:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
-    { no: "57X", from: "Koyambedu", to: "Kelambakkam", via: "Guindy, Velachery, OMR", freq: "18m", type: "Express Electric", timing: "5:30 AM - 9:00 PM", fare: "₹8-35", electric: true, status: "Live", popular: false },
     { no: "70V", from: "Broadway", to: "Velachery", via: "T.Nagar, Guindy, Adyar", freq: "10m", type: "Electric", timing: "5:00 AM - 10:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
-    { no: "A51", from: "High Court", to: "Tambaram East", via: "Guindy, Chrompet", freq: "12m", type: "Deluxe", timing: "5:00 AM - 9:30 PM", fare: "₹10-40", electric: false, status: "On Time", popular: false },
+    { no: "23C", from: "Ayanavaram", to: "Besant Nagar", via: "Egmore, T.Nagar, Adyar", freq: "12m", type: "Express", timing: "4:05 AM - 8:10 PM", fare: "₹8-35", electric: false, status: "On Time", popular: false },
+
+    // === KOYAMBEDU CMBT ROUTES (For inter-city bus connections) ===
+    { no: "570", from: "CMBT Koyambedu", to: "Kelambakkam", via: "Velachery, Siruseri, OMR", freq: "12m", type: "AC Express", timing: "4:50 AM - 9:15 PM", fare: "₹15-50", electric: true, status: "Live", popular: true },
+    { no: "202X", from: "Avadi", to: "Kilambakkam", via: "Koyambedu, Guindy, Tambaram, Guduvanchery", freq: "25m", type: "Express", timing: "5:30 AM - 8:30 PM", fare: "₹8-35", electric: false, status: "On Time", popular: false },
+    { no: "57X", from: "Koyambedu", to: "Kelambakkam", via: "Guindy, Velachery, OMR, Siruseri", freq: "18m", type: "Express Electric", timing: "5:30 AM - 9:00 PM", fare: "₹8-35", electric: true, status: "Live", popular: false },
+    { no: "M27", from: "T.Nagar", to: "CMBT Koyambedu", via: "Vadapalani, Virugambakkam", freq: "8m", type: "Ordinary", timing: "5:00 AM - 10:00 PM", fare: "₹5-23", electric: false, status: "On Time", popular: false },
+    { no: "77", from: "CMBT", to: "Ambattur Estate", via: "Koyambedu, Ambattur", freq: "5m", type: "Ordinary", timing: "4:30 AM - 11:00 PM", fare: "₹5-23", electric: false, status: "On Time", popular: false },
     { no: "153", from: "CMBT Koyambedu", to: "Thiruvallur", via: "Ambattur, Poonamallee", freq: "20m", type: "Ordinary", timing: "5:30 AM - 8:30 PM", fare: "₹5-23", electric: false, status: "On Time", popular: false },
+
+    // === OMR / IT CORRIDOR ROUTES ===
+    { no: "19", from: "T.Nagar", to: "Thiruporur", via: "Velachery, OMR, Kelambakkam", freq: "20m", type: "Electric", timing: "5:30 AM - 9:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
+    { no: "170TX", from: "Poonamallee", to: "Sholinganallur", via: "Vadapalani, Guindy, OMR", freq: "15m", type: "Electric", timing: "5:30 AM - 9:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
     { no: "MAA2", from: "Siruseri", to: "Airport", via: "OMR, Guindy, Meenambakkam", freq: "30m", type: "AC Electric", timing: "6:00 AM - 10:00 PM", fare: "₹15-50", electric: true, status: "Live", popular: false },
+    { no: "588", from: "Adyar", to: "Mamallapuram", via: "OMR, ECR, Kovalam", freq: "30m", type: "Deluxe", timing: "6:00 AM - 8:00 PM", fare: "₹10-40", electric: false, status: "On Time", popular: false },
+    { no: "119", from: "Broadway", to: "Sholinganallur", via: "Mylapore, Adyar, OMR", freq: "15m", type: "Express", timing: "5:00 AM - 9:30 PM", fare: "₹8-30", electric: false, status: "On Time", popular: false },
+    { no: "M21B", from: "Chromepet", to: "Velachery", via: "Pallavaram, Nanganallur", freq: "12m", type: "Ordinary", timing: "5:30 AM - 9:30 PM", fare: "₹5-15", electric: false, status: "On Time", popular: false },
+
+    // === VELACHERY / GUINDY CONNECTOR ROUTES ===
+    { no: "29C", from: "Perambur", to: "Velachery", via: "Egmore, T.Nagar, Guindy", freq: "10m", type: "Deluxe", timing: "5:00 AM - 10:30 PM", fare: "₹10-40", electric: false, status: "On Time", popular: false },
+    { no: "164E", from: "Tondiarpet", to: "Velachery", via: "Broadway, T.Nagar, Guindy", freq: "12m", type: "Electric", timing: "5:00 AM - 9:30 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
+    { no: "C33", from: "Circular Route", to: "K.Kannadasan Nagar", via: "Anna Nagar, Vadapalani", freq: "20m", type: "Electric", timing: "6:00 AM - 9:00 PM", fare: "₹5-23", electric: true, status: "Live", popular: false },
+
+    // === AIRPORT CONNECTOR ROUTES ===
+    { no: "96A", from: "Chennai Airport", to: "Tambaram", via: "Meenambakkam, Pallavaram, Chromepet", freq: "15m", type: "Express", timing: "5:00 AM - 11:00 PM", fare: "₹8-20", electric: false, status: "On Time", popular: false },
+    { no: "49", from: "Chennai Airport", to: "Central Station", via: "Meenambakkam, Guindy, Egmore", freq: "10m", type: "Express", timing: "4:30 AM - 11:30 PM", fare: "₹10-30", electric: false, status: "On Time", popular: false },
+
+    // === EXTENDED GST ROAD / CHENGALPATTU ROUTES ===
+    { no: "515", from: "Chengalpattu", to: "Maraimalainagar", via: "Singaperumal Koil, Kattankulathur", freq: "20m", type: "Ordinary", timing: "5:30 AM - 8:30 PM", fare: "₹5-12", electric: false, status: "On Time", popular: false },
+    { no: "116", from: "Tambaram", to: "Singaperumal Koil", via: "Guduvanchery, Potheri, Kattankulathur", freq: "25m", type: "Ordinary", timing: "5:30 AM - 9:00 PM", fare: "₹5-15", electric: false, status: "On Time", popular: false },
+    { no: "66CTGS", from: "Kundrathur", to: "Tambaram", via: "Mangadu, Pammal, Pallavaram", freq: "20m", type: "Ordinary", timing: "5:30 AM - 9:00 PM", fare: "₹5-15", electric: false, status: "On Time", popular: false },
+    { no: "155", from: "Tambaram", to: "Chengalpattu", via: "Urapakkam, Guduvanchery, Maraimalainagar", freq: "15m", type: "Ordinary", timing: "5:00 AM - 9:00 PM", fare: "₹5-20", electric: false, status: "On Time", popular: false },
 ];
 
 const srmShuttles = [
