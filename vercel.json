@@ -4,5 +4,11 @@
             "source": "/(.*)",
             "destination": "/index.html"
         }
+    ],
+    "crons": [
+        {
+            "path": "/api/cron/events-ingest",
+            "schedule": "30 18 * * *"
+        }
     ]
 }

@@ -1,5 +1,5 @@
 import { isCronAuthorized } from "../_lib/cronAuth";
-import { ingestTicketmasterEvents } from "../_lib/eventsIngestion";
+import { ingestEvents } from "../_lib/eventsIngestion";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET" && req.method !== "POST") {
@@ -11,7 +11,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const result = await ingestTicketmasterEvents();
+    const result = await ingestEvents();
     return res.status(200).json(result);
   } catch (error: any) {
     console.error("events-ingest failed:", error);

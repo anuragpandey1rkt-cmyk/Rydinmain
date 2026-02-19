@@ -23,6 +23,7 @@ export const useRealtimeEvents = (filter: string = "all") => {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -76,7 +77,6 @@ export const useRealtimeEvents = (filter: string = "all") => {
 
         setEvents(eventsWithInterest);
 
-        // Real-time subscription for events
         subscription = supabase
           .channel("events-channel")
           .on(
@@ -165,7 +165,13 @@ export const useRealtimeEvents = (filter: string = "all") => {
               );
             }
           )
-          .subscribe();
+          .subscribe((status) => {
+            if (status === "SUBSCRIBED") {
+              setIsConnected(true);
+            } else if (status === "CLOSED" || status === "CHANNEL_ERROR") {
+              setIsConnected(false);
+            }
+          });
 
         setError(null);
       } catch (err: any) {
@@ -185,5 +191,5 @@ export const useRealtimeEvents = (filter: string = "all") => {
     };
   }, [filter, user?.id]);
 
-  return { events, isLoading, error };
+  return { events, isLoading, error, isConnected };
 };
