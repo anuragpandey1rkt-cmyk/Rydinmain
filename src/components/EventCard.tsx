@@ -22,19 +22,30 @@ interface EventCardProps {
 
 const EventCard = ({ event, onSelect, onInterest }: EventCardProps) => {
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    try {
+      if (!dateStr) return "Date TBA";
+      const date = new Date(dateStr);
 
-    if (date.toDateString() === today.toDateString()) return "Today";
-    if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+      // Check for invalid date
+      if (isNaN(date.getTime())) {
+        return dateStr || "Date TBA";
+      }
 
-    return date.toLocaleDateString("en-IN", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      if (date.toDateString() === today.toDateString()) return "Today";
+      if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+
+      return date.toLocaleDateString("en-IN", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+    } catch (e) {
+      return dateStr || "Date TBA";
+    }
   };
 
   const getCategoryColor = (category: string) => {
@@ -81,8 +92,8 @@ const EventCard = ({ event, onSelect, onInterest }: EventCardProps) => {
             >
               <Heart
                 className={`w-5 h-5 ${event.is_interested
-                    ? "fill-red-500 text-red-500"
-                    : "text-muted-foreground"
+                  ? "fill-red-500 text-red-500"
+                  : "text-muted-foreground"
                   }`}
               />
             </button>

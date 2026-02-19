@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { X, MapPin, Clock, Users, Heart, MapIcon } from "lucide-react";
 import {
   Dialog,
@@ -37,6 +38,7 @@ const EventModal = ({
   onClose,
   onInterest,
 }: EventModalProps) => {
+  const navigate = useNavigate();
   const [rideRooms, setRideRooms] = useState<any[]>([]);
   const [isLoadingRides, setIsLoadingRides] = useState(true);
   const { toast } = useToast();
@@ -136,8 +138,8 @@ const EventModal = ({
               <button onClick={onInterest}>
                 <Heart
                   className={`w-6 h-6 ${event.is_interested
-                      ? "fill-red-500 text-red-500"
-                      : "text-muted-foreground"
+                    ? "fill-red-500 text-red-500"
+                    : "text-muted-foreground"
                     }`}
                 />
               </button>
@@ -209,7 +211,26 @@ const EventModal = ({
                 <p className="text-sm text-muted-foreground">
                   No rides available yet
                 </p>
-                <Button size="sm" className="mt-3">
+                <Button
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    onClose();
+                    // Navigate to create ride with pre-filled details
+                    const params = new URLSearchParams({
+                      to: event.location,
+                      date: event.date,
+                      event_name: event.name,
+                      event_image: event.image_url || "",
+                      event_id: event.id
+                    });
+                    // trigger navigation via window location to ensure full page reload if needed,
+                    // or better yet, use the router if we can access it.
+                    // Since EventModal is inside Router context (in Events.tsx), we should use useNavigate.
+                    // But first let's check if we imported it.
+                    navigate(`/create?${params.toString()}`);
+                  }}
+                >
                   Create Ride
                 </Button>
               </div>

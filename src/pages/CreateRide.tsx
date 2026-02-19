@@ -253,6 +253,32 @@ const CreateRide = () => {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-lg mx-auto px-4 sm:px-6 py-6"
       >
+        {/* Event Banner */}
+        {searchParams.get("event_name") && (
+          <div className="mb-6 bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+            <div className="h-32 bg-muted relative">
+              {searchParams.get("event_image") ? (
+                <img
+                  src={searchParams.get("event_image")!}
+                  alt={searchParams.get("event_name")!}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl">🎪</div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4">
+                <h2 className="text-white font-bold text-lg truncate drop-shadow-md">
+                  {searchParams.get("event_name")}
+                </h2>
+              </div>
+            </div>
+            <div className="p-3 bg-primary/5 text-primary text-xs font-medium flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              Creating a ride for this event
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
 
           {/* ── Locations ─────────────────────────────────────────────────── */}
