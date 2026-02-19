@@ -31,6 +31,7 @@ interface AuthContextType {
   verifyOtp: (email: string, token: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  loginWithSRM: (email: string, password: string, onSuccess?: () => void) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -346,10 +347,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    localStorage.removeItem("rydin_srm_token");
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
   };
+
+  // ──── SRM Academia Login ────────────────────────────────────────────────
+
+  const loginWithSRM = async (email: string, password: string, onSuccess?: () => void) => {
+    try {
+      console.log("🕵️ Attempting SRM Academia Login for:", email);
+      const response = await fetch(import.meta.env.VITE_SRM_AUTH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log("✅ SRM Verification Success. Token received.");
+        localStorage.setItem("rydin_srm_token", data.token);
+
+        // Set minimal profile so isAuthenticated = true immediately
+        const srmEmail = email.toLowerCase();
+        const minimalProfile: Profile = {
+          id: srmEmail,
+          email: srmEmail,
+          name: srmEmail.split("@")[0],
+          trust_score: 4.0,
+          profile_complete: false,
+          identity_verified: false,
+          email_confirmed_at: new Date().toISOString(),
+        };
+        setUser(minimalProfile);
+
+        // Bridge to Supabase (await so real profile_complete is known before redirect)
+        try {
+          const internalPassword = "SRM_VERIFIED_USER_SESSION_" + srmEmail.split("@")[0];
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: srmEmail,
+            password: internalPassword,
+          });
+
+          if (signInError) {
+            console.log("🔄 Supabase signIn failed, trying signUp bridge...");
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email: srmEmail,
+              password: internalPassword,
+            });
+            if (!signUpError && signUpData.session) {
+              setSession(signUpData.session);
+              if (signUpData.user) await fetchProfile(signUpData.user, signUpData.session);
+            }
+          } else if (signInData.session) {
+            setSession(signInData.session);
+            if (signInData.user) await fetchProfile(signInData.user, signInData.session);
+          }
+        } catch (bridgeError) {
+          console.warn("⚠️ Supabase bridge failed (SRM token still valid):", bridgeError);
+        }
+
+        // Call onSuccess AFTER bridge — real profile_complete is now in state
+        onSuccess?.();
+
+      } else {
+        throw new Error(data.message || "Invalid SRM credentials");
+      }
+    } catch (err: any) {
+      console.error("SRM Login Error:", err.message);
+      throw err;
+    }
+  };
+
 
   // ──── Profile update ───────────────────────────────────────────────────
 
@@ -436,12 +507,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
-        isAuthenticated: !!session?.user,
+        isAuthenticated: !!session?.user || !!localStorage.getItem("rydin_srm_token"),
         isLoading,
         signUp,
         verifyOtp,
         login,
         loginWithGoogle,
+        loginWithSRM,
         logout,
         updateProfile,
         refreshProfile,
