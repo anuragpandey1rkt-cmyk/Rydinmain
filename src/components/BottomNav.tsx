@@ -19,7 +19,7 @@ const BottomNav = () => {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-      <div className="flex items-center w-full h-16 px-1">
+      <div className="flex items-center w-full h-16 max-w-3xl mx-auto px-1 md:px-4">
         {navItems.map(({ icon: Icon, label, path }) => {
           const active = location.pathname === path;
           return (
@@ -31,8 +31,8 @@ const BottomNav = () => {
                 active ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Icon className="w-4 h-4" />
-              <span className="text-[8px] font-medium leading-tight text-center w-full truncate">{label}</span>
+              <Icon className="w-4 h-4 md:w-5 md:h-5" />
+              <span className="text-[8px] md:text-[10px] font-medium leading-tight text-center w-full truncate">{label}</span>
             </button>
           );
         })}
