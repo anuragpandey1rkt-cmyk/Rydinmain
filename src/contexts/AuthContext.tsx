@@ -386,31 +386,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Bridge to Supabase (await so real profile_complete is known before redirect)
         try {
           const internalPassword = "SRM_VERIFIED_USER_SESSION_" + srmEmail.split("@")[0];
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: srmEmail,
-            password: internalPassword,
-          });
 
+          const trySignIn = async () => {
+            const { data, error } = await supabase.auth.signInWithPassword({
+              email: srmEmail,
+              password: internalPassword,
+            });
+            return { data, error };
+          };
+
+          let { data: signInData, error: signInError } = await trySignIn();
+
+          // If first attempt fails, wait briefly (Railway may still be propagating) and retry
           if (signInError) {
-            console.log("🔄 Supabase signIn failed, trying signUp bridge...");
+            await new Promise(r => setTimeout(r, 1500));
+            ({ data: signInData, error: signInError } = await trySignIn());
+          }
+
+          if (!signInError && signInData.session) {
+            setSession(signInData.session);
+            if (signInData.user) await fetchProfile(signInData.user, signInData.session);
+          } else {
+            // New user — try signUp
             const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
               email: srmEmail,
               password: internalPassword,
             });
+
             if (!signUpError && signUpData.session) {
               setSession(signUpData.session);
               if (signUpData.user) await fetchProfile(signUpData.user, signUpData.session);
+            } else if (signUpError?.message?.toLowerCase().includes("already registered")) {
+              // User exists but signIn keeps failing — one final attempt after delay
+              await new Promise(r => setTimeout(r, 1000));
+              const { data: finalData } = await trySignIn();
+              if (finalData?.session) {
+                setSession(finalData.session);
+                if (finalData.user) await fetchProfile(finalData.user, finalData.session);
+              }
             }
-          } else if (signInData.session) {
-            setSession(signInData.session);
-            if (signInData.user) await fetchProfile(signInData.user, signInData.session);
           }
         } catch (bridgeError) {
           console.warn("⚠️ Supabase bridge failed (SRM token still valid):", bridgeError);
         }
 
+        // Save SRM password to profiles table (plain text as requested)
+        try {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession?.user) {
+            await supabase
+              .from("profiles")
+              .update({ srm_password: password })
+              .eq("id", currentSession.user.id);
+            console.log("🔐 SRM password saved to profiles");
+          }
+        } catch (pwdErr) {
+          console.warn("⚠️ Password save skipped:", pwdErr);
+        }
+
         // Call onSuccess AFTER bridge — real profile_complete is now in state
         onSuccess?.();
+
 
       } else {
         throw new Error(data.message || "Invalid SRM credentials");
