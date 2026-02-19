@@ -6,18 +6,20 @@
  * bun run scripts/ingest-manual.ts
  */
 
-import { ingestTicketmasterEvents } from "../api/_lib/eventsIngestion";
+import * as dotenv from "dotenv";
+dotenv.config();
+
+import { ingestEvents } from "../api/_lib/eventsIngestion";
 
 async function runManualIngest() {
     console.log("🚀 Starting manual event ingestion...");
 
     try {
-        const result = await ingestTicketmasterEvents();
+        const result = await ingestEvents();
         console.log("✅ Ingestion complete!");
         console.log("-------------------");
-        console.log(`Fetched from Ticketmaster: ${result.fetched}`);
-        console.log(`Upserted to Database:    ${result.upserted}`);
-        console.log(`Timestamp:               ${result.fetchedAt}`);
+        console.log(`Events Generated: ${result.generated}`);
+        console.log(`Message:          ${result.message}`);
         console.log("-------------------");
         console.log("You should now see events appearing in your local app.");
     } catch (error: any) {

@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 const Events = () => {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [filter, setFilter] = useState<string>("all");
-  const { events, isLoading, error } = useRealtimeEvents(filter);
+  const { events, isLoading, error, isConnected } = useRealtimeEvents(filter);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -67,7 +67,15 @@ const Events = () => {
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold">Events Nearby</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold">Events Nearby</h1>
+                {isConnected && (
+                  <div className="relative flex h-3 w-3" title="Live updates active">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  </div>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">
                 Find events and ride together (Real-time)
               </p>
@@ -84,8 +92,8 @@ const Events = () => {
                 key={cat}
                 onClick={() => setFilter(cat)}
                 className={`px-4 py-2 rounded-lg whitespace-nowrap text-sm font-medium transition-colors ${filter === cat
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
                   }`}
               >
                 {cat.charAt(0).toUpperCase() + cat.slice(1).replace("_", " ")}
