@@ -68,9 +68,9 @@ const generateGroqEventsBatch = async (startDate: Date, endDate: Date, count: nu
     - image_url (use these realistic unsplash placeholders:
         - concert: https://images.unsplash.com/photo-1501281668745-f7f57925c3b4
         - tech_talk: https://images.unsplash.com/photo-1544531586-fde5298cdd40
-        - hackathon: https://images.unsplash.com/photo-1504384308090-c54be3855485
+        - hackathon: https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=1080
         - sports: https://images.unsplash.com/photo-1631194758628-71ec7c35137e
-        - fest: https://images.unsplash.com/photo-1459749411177-27595190a8e2
+        - fest: https://images.unsplash.com/photo-1493225255756-d9584f8606e9?auto=format&fit=crop&q=80&w=1080
     )
     `;
 
@@ -102,12 +102,13 @@ export const ingestEvents = async () => {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  // 1. Cleanup Expired Events
-  console.log(`🧹 Cleaning up events before ${todayStr}...`);
+  // 1. Cleanup Expired Events & Refresh Future Events
+  console.log(`🧹 Cleaning up events...`);
+  // Delete all AI generated events to ensure fresh data and images
   const { error: deleteError } = await supabase
     .from("events")
     .delete()
-    .lt("event_date", todayStr);
+    .eq("source", "groq_gen");
 
   if (deleteError) {
     console.error("⚠️ Failed to cleanup expired events:", deleteError.message);
