@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 import { useEffect } from "react";
 import { debugSupabase } from "@/lib/debugSupabase";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -31,6 +32,7 @@ import ProfileEdit from "./pages/ProfileEdit";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import AIAssistantOverlay from "./components/AIAssistantOverlay";
+import { NotificationPermissionPrompt } from "./components/NotificationPermissionPrompt";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -172,13 +174,16 @@ const App = () => {
       <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
         <TooltipProvider>
           <AuthProvider>
-            <GlobalHooks />
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <AppRoutes />
-              <AIAssistantOverlay />
-            </BrowserRouter>
+            <NotificationProvider>
+              <GlobalHooks />
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <AppRoutes />
+                <AIAssistantOverlay />
+                <NotificationPermissionPrompt />
+              </BrowserRouter>
+            </NotificationProvider>
           </AuthProvider>
         </TooltipProvider>
       </ThemeProvider>

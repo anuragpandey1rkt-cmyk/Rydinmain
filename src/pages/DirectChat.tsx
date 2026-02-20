@@ -55,6 +55,19 @@ const DirectChat = () => {
         if (error) {
             console.error("Failed to send:", error);
             setNewMessage(content);
+        } else {
+            // Notify recipient
+            try {
+                const { sendMessageNotification } = await import("@/lib/notifications");
+                await sendMessageNotification(
+                    otherUserId,
+                    user.name || "A student",
+                    content,
+                    `/chat/${user.id}`
+                );
+            } catch (notifErr) {
+                console.warn("Notification failed:", notifErr);
+            }
         }
     };
 
