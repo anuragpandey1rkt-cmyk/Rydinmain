@@ -56,6 +56,27 @@ const RideChat = () => {
         if (error) {
             console.error("Failed to send:", error);
             setNewMessage(content); // Restore message on error
+        } else {
+            // Background: notify other members
+            try {
+                const { getRideMembers } = await import("@/lib/database");
+                const { sendMessageNotification } = await import("@/lib/notifications");
+                const members = await getRideMembers(rideId);
+
+                const destination = rideInfo?.destination || "Ride";
+                const otherMembers = members.filter(m => m.user_id !== user.id);
+
+                for (const member of otherMembers) {
+                    await sendMessageNotification(
+                        member.user_id,
+                        user.name || "Member",
+                        `[${destination}] ${content}`,
+                        `/ride-chat?rideId=${rideId}`
+                    );
+                }
+            } catch (notifErr) {
+                console.warn("Notification trigger failed:", notifErr);
+            }
         }
     };
 

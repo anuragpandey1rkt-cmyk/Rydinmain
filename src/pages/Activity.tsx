@@ -268,6 +268,22 @@ const Activity = () => {
             const result = data as any;
             if (!result.success) throw new Error(result.error);
 
+            // Notify requester if accepted
+            if (action === 'accept') {
+                try {
+                    const { sendRequestAcceptedNotification } = await import("@/lib/notifications");
+                    // Find the ride info to get destination
+                    const rideId = requestsReceived.find(r => r.user_id === memberId)?.ride_id || "";
+                    await sendRequestAcceptedNotification(
+                        memberId,
+                        user?.name || "The host",
+                        rideId
+                    );
+                } catch (notifErr) {
+                    console.warn("Notification failed:", notifErr);
+                }
+            }
+
             toast({
                 title: action === 'accept' ? "Accepted! ✅" : "Rejected",
                 description: action === 'accept' ? "Student added to your ride group." : "Request declined."

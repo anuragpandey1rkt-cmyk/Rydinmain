@@ -4,8 +4,10 @@ import { AlertTriangle, CheckCircle2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { lockRideForCommitment, getCommittedMembers } from "@/lib/rideLock";
+import { lockRideByHost } from "@/lib/rideLock";
+import { getRideMembers } from "@/lib/database";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface RideLockModalProps {
   rideId: string;
@@ -22,6 +24,7 @@ const RideLockModal = ({
   memberCount,
   onLockSuccess,
 }: RideLockModalProps) => {
+  const { user } = useAuth();
   const [acknowledged, setAcknowledged] = useState(false);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
@@ -38,21 +41,43 @@ const RideLockModal = ({
       return;
     }
 
+    if (!user) return;
+
     setLoading(true);
     try {
-      await lockRideForCommitment(rideId);
-      
+      const result = await lockRideByHost(rideId, user.id);
+      if (!result.success) throw new Error(result.error);
+
       // Fetch members after lock
-      const committedMembers = await getCommittedMembers(rideId);
+      const committedMembers = await getRideMembers(rideId);
       setMembers(committedMembers);
+
+      // Trigger notifications to all members
+      try {
+        const { sendRideStartedNotification } = await import("@/lib/notifications");
+        const { supabase } = await import("@/integrations/supabase/client");
+
+        // Fetch ride info for the notification
+        const { data: ride } = await supabase.from("rides").select("destination").eq("id", rideId).maybeSingle();
+        const destination = ride?.destination || "Ride";
+
+        for (const member of committedMembers) {
+          // Notify everyone except the host
+          if (member.user_id !== user.id) {
+            await sendRideStartedNotification(
+              member.user_id,
+              `to ${destination}`
+            );
+          }
+        }
+      } catch (notifErr) {
+        console.warn("Lock notification failed:", notifErr);
+      }
 
       toast({
         title: "Ride Locked! 🔒",
         description: `Your commitment is now locked. ${memberCount} member${memberCount !== 1 ? "s" : ""} will be notified.`,
       });
-
-      // Send notifications to all members (mock - in production, use Supabase edge functions)
-      console.log("Notifying members about locked ride:", committedMembers);
 
       onLockSuccess?.();
       setTimeout(() => onOpenChange(false), 1500);

@@ -15,6 +15,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeRides } from "@/hooks/useRealtimeRides";
 import { requestJoinRide, calculateRideSavings } from "@/lib/database";
 import { debugSupabase } from "@/lib/debugSupabase";
+import { NotificationBell } from "@/components/NotificationBell";
+import { useNotifications } from "@/contexts/NotificationContext";
+import { InstallPrompt } from "@/components/InstallPrompt";
+import { sendRideRequestNotification } from "@/lib/notifications";
 
 const filters = ["All", "Airport", "Station", "Girls Only"];
 
@@ -35,6 +39,7 @@ const Index = () => {
   const { session, user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
+  const { isInstallable } = useNotifications();
 
   // Make debug function available in console
   useEffect(() => {
@@ -119,6 +124,15 @@ const Index = () => {
           variant: "destructive"
         });
         return;
+      }
+
+      // Send notification to host
+      if (targetRide?.host_id) {
+        await sendRideRequestNotification(
+          targetRide.host_id,
+          user?.name || "A student",
+          id
+        );
       }
 
       toast({
@@ -212,6 +226,7 @@ const Index = () => {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <NotificationBell />
               <Button
                 variant="outline"
                 size="icon"
@@ -221,6 +236,7 @@ const Index = () => {
               >
                 {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </Button>
+              {/* ... existing filter button ... */}
 
               <Sheet>
                 <SheetTrigger asChild>
@@ -316,6 +332,7 @@ const Index = () => {
       </header>
 
       <main className="max-w-lg mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {isInstallable && <InstallPrompt />}
         {/* WhatsApp Community Banner */}
         <div className="flex items-center justify-between bg-background border border-border rounded-xl p-4 mb-6 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer group animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center gap-4">
